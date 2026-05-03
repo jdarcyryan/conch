@@ -1,19 +1,25 @@
+# GoReleaser config — https://goreleaser.com
 version: 2
 
+# Project metadata
 project_name: conch
 dist: ./.output
 
+# Pre-build setup
 before:
   hooks:
     - go mod tidy
 
+# Manually incremented versioning
 snapshot:
   version_template: 0.1.0
 
+# Build
+# Compiles the Go binary for each OS/arch combination.
 builds:
   - main: ./cli
-    no_unique_dist_dir: true
     binary: "bin/{{ .Os }}_{{ .Arch }}/conch"
+    no_unique_dist_dir: true
     env:
       - CGO_ENABLED=0
     goos:
@@ -22,32 +28,37 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Strip debug info and inject version metadata into the binary.
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
 
+# Package
+# Archives: portable .tar.gz / .zip downloads.
 archives:
   - name_template: "dist/{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
-    formats: [tar.gz]
 
+# Linux native packages: Debian, Red Hat, Alpine.
 nfpms:
-  - vendor: jdarcyryan
-    homepage: https://github.com/jdarcyryan/conch
-    maintainer: jdarcyryan
-    description: Declarative PowerShell environment manager written in Go.
-    license: Apache-2.0
-    file_name_template: "dist/{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+  - file_name_template: "dist/{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
     formats:
       - deb
       - rpm
       - apk
     bindir: /usr/bin
+    vendor: jdarcyryan
+    maintainer: jdarcyryan
+    homepage: https://github.com/jdarcyryan/conch
+    description: Declarative PowerShell environment manager written in Go.
+    license: Apache-2.0
 
+# Checksums
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
