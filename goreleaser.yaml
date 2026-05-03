@@ -73,6 +73,7 @@ chocolateys:
       Conch is a cross-platform, declarative PowerShell environment manager written in Go.
       Describe your PowerShell versions and modules in a single TOML file.
     release_notes: "https://github.com/jdarcyryan/conch/releases/tag/{{ .Version }}"
+    url_template: 'https://github.com/jdarcyryan/conch/releases/download/{{ .Version }}/{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}.zip'
     skip_publish: true
 
 # Checksums
