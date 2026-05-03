@@ -1,1 +1,1 @@
-![Conch](assets/conch_text_2160x1080.png)
+![Conch](assets/conch_text_2160x810.png)
