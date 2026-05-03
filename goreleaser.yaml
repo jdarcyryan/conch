@@ -2,7 +2,6 @@
 version: 2
 
 # Project metadata
-project_name: conch
 dist: ./.output
 
 # Pre-build setup
@@ -19,7 +18,6 @@ snapshot:
 # Compiles the Go binary for each OS/arch combination.
 builds:
   - main: .
-    binary: conch
     env:
       - CGO_ENABLED=0
     goos:
