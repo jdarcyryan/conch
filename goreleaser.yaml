@@ -2,12 +2,14 @@
 version: 2
 
 # Project metadata
+project_name: conch
 dist: ./.output
 
 # Pre-build setup
 before:
   hooks:
     - go mod tidy
+    - go-winres make --in winres/winres.json
 
 # Manually incremented versioning
 snapshot:
