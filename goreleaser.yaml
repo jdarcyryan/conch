@@ -2,7 +2,6 @@
 version: 2
 
 # Project metadata
-project_name: conch
 dist: ./.output
 
 # Pre-build setup
@@ -17,9 +16,8 @@ snapshot:
 # Build
 # Compiles the Go binary for each OS/arch combination.
 builds:
-  - main: ./cli
-    binary: "bin/{{ .Os }}_{{ .Arch }}/conch"
-    no_unique_dist_dir: true
+  - main: ./conch
+    binary: conch
     env:
       - CGO_ENABLED=0
     goos:
@@ -38,7 +36,7 @@ builds:
 # Package
 # Archives: portable .tar.gz / .zip downloads.
 archives:
-  - name_template: "dist/{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -46,7 +44,7 @@ archives:
 
 # Linux native packages: Debian, Red Hat, Alpine.
 nfpms:
-  - file_name_template: "dist/{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+  - file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
     formats:
       - deb
       - rpm
@@ -73,7 +71,7 @@ chocolateys:
       Conch is a cross-platform, declarative PowerShell environment manager written in Go.
       Describe your PowerShell versions and modules in a single TOML file.
     release_notes: "https://github.com/jdarcyryan/conch/releases/tag/{{ .Version }}"
-    url_template: 'https://github.com/jdarcyryan/conch/releases/download/{{ .Version }}/{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}.zip'
+    url_template: 'https://github.com/jdarcyryan/conch/releases/download/{{ .Version }}/{{ .ArtifactName }}'
     skip_publish: true
 
 # Checksums
