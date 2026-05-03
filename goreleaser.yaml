@@ -7,8 +7,13 @@ before:
   hooks:
     - go mod tidy
 
+snapshot:
+  version_template: "{{ .Version }}"
+
 builds:
   - main: ./cli
+    no_unique_dist_dir: true
+    binary: "{{ .Os }}_{{ .Arch }}/conch"
     env:
       - CGO_ENABLED=0
     goos:
@@ -41,3 +46,7 @@ nfpms:
       - rpm
       - apk
     bindir: /usr/bin
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
