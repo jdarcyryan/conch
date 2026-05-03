@@ -58,6 +58,23 @@ nfpms:
     description: Declarative PowerShell environment manager written in Go.
     license: Apache-2.0
 
+# Chocolatey package (.nupkg). Generated locally; not pushed.
+chocolateys:
+  - name: conch
+    title: Conch environment manager.
+    authors: jdarcyryan
+    project_url: https://github.com/jdarcyryan/conch
+    license_url: https://github.com/jdarcyryan/conch/blob/main/LICENSE
+    project_source_url: https://github.com/jdarcyryan/conch
+    docs_url: https://github.com/jdarcyryan/conch/blob/main/README.md
+    bug_tracker_url: https://github.com/jdarcyryan/conch/issues
+    summary: Declarative PowerShell environment manager written in Go.
+    description: |
+      Conch is a cross-platform, declarative PowerShell environment manager written in Go.
+      Describe your PowerShell versions and modules in a single TOML file.
+    release_notes: "https://github.com/jdarcyryan/conch/releases/tag/{{ .Version }}"
+    skip_publish: true
+
 # Checksums
 checksum:
   name_template: "checksums.txt"
