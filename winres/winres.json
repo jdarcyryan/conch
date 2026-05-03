@@ -1,11 +1,4 @@
 {
-  "RT_GROUP_ICON": {
-    "APP": {
-      "0000": [
-        "icon.png"
-      ]
-    }
-  },
   "RT_MANIFEST": {
     "#1": {
       "0409": {
@@ -14,20 +7,8 @@
           "version": "0.0.0"
         },
         "description": "Declarative PowerShell environment manager written in Go.",
-        "minimum-os": "win7",
         "execution-level": "as invoker",
-        "ui-access": false,
-        "auto-elevate": false,
-        "dpi-awareness": "system",
-        "disable-theming": false,
-        "disable-window-filtering": false,
-        "high-resolution-scrolling-aware": false,
-        "ultra-high-resolution-scrolling-aware": false,
-        "long-path-aware": true,
-        "printer-driver-isolation": false,
-        "gdi-scaling": false,
-        "segment-heap": false,
-        "use-common-controls-v6": false
+        "long-path-aware": true
       }
     }
   },
@@ -40,18 +21,13 @@
         },
         "info": {
           "0409": {
-            "Comments": "Cross-platform, declarative PowerShell environment manager. Describe your PowerShell versions and modules in a single TOML file.",
             "CompanyName": "jdarcyryan",
             "FileDescription": "Conch environment manager.",
             "FileVersion": "0.0.0",
-            "InternalName": "conch",
             "LegalCopyright": "Apache-2.0",
-            "LegalTrademarks": "",
             "OriginalFilename": "conch.exe",
-            "PrivateBuild": "",
             "ProductName": "Conch",
-            "ProductVersion": "0.0.0",
-            "SpecialBuild": ""
+            "ProductVersion": "0.0.0"
           }
         }
       }
