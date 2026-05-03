@@ -1,2 +1,5 @@
 # JetBrains GoLand
 .idea/
+
+# Build
+.output
