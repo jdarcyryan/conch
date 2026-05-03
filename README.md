@@ -10,7 +10,7 @@
 [![forks](https://img.shields.io/github/forks/jdarcyryan/conch?style=flat&logo=github&color=6f42c1)](https://github.com/jdarcyryan/conch/network/members)
 [![contributors](https://img.shields.io/github/contributors/jdarcyryan/conch?style=flat&logo=github&color=6f42c1)](https://github.com/jdarcyryan/conch/graphs/contributors)
 [![issues](https://img.shields.io/github/issues/jdarcyryan/conch?style=flat&logo=github&color=6f42c1)](https://github.com/jdarcyryan/conch/issues)
-[![license](https://img.shields.io/github/license/jdarcyryan/conch?style=flat&logo=github&color=6f42c1)](https://github.com/jdarcyryan/conch/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-6f42c1?style=flat&logo=github)](https://github.com/jdarcyryan/conch/blob/main/LICENSE)
 
 ![windows](https://img.shields.io/badge/windows-0078D6?style=flat)
 ![linux](https://img.shields.io/badge/-FCC624?style=flat&logo=linux&logoColor=black)
