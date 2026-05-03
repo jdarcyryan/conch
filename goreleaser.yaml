@@ -16,7 +16,7 @@ snapshot:
 # Build
 # Compiles the Go binary for each OS/arch combination.
 builds:
-  - main: ./conch
+  - main: .
     binary: conch
     env:
       - CGO_ENABLED=0
