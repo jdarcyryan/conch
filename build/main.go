@@ -25,6 +25,9 @@ func main() {
 	step("Ensuring go-winres is installed")
 	ensureTool("go-winres", "github.com/tc-hib/go-winres@"+goWinresVersion)
 
+	step("Cleaning up .syso files")
+	cleanSyso()
+
 	step("Generating Windows resources")
 	run("go-winres", "make", "--in", "winres/winres.json")
 
