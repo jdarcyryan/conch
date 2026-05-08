@@ -4,7 +4,7 @@ Project context for Claude Code working on **conch**.
 
 ## Project overview
 
-Conch is a declarative, cross-platform PowerShell environment manager written in Go. It lets a user describe a PowerShell environment — the PowerShell version itself plus any number of PowerShell modules — in a single TOML manifest, and then materialises that environment locally in a reproducible, isolated way.
+Conch is a declarative, cross-platform PowerShell environment manager written in Go. It lets a user describe a PowerShell environment — the PowerShell version itself plus any number of PowerShell modules — in a single TOML manifest in the root of the project, named conch.toml, and then materialises that environment locally in a reproducible, isolated way.
 
 Think of it as `pixi` but specifically for PowerShell:
 
@@ -28,7 +28,7 @@ When designing the CLI surface or manifest schema, the default heuristic is: *wh
 
 ## Manifest schema is examples-driven
 
-The manifest is TOML. **Do not invent or assume field names.** Example manifests live in `examples/` and are the source of truth for the schema. Parsers, validators, and tests must be written against those files, and any new manifest features need a corresponding example added there first.
+The manifest is TOML, living in conch.toml at the root of the project. **Do not invent or assume field names.** Example manifests live in `examples/` and are the source of truth for the schema. Parsers, validators, and tests must be written against those files, and any new manifest features need a corresponding example added there first.
 
 A few semantic rules the parser must enforce regardless of exact field names:
 
