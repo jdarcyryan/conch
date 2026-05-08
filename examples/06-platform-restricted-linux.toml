@@ -1,0 +1,36 @@
+# platform-restricted-linux.toml
+#
+# Narrowing the project's supported platform set to Linux only.
+#
+# This is the mirror of platform-restricted-win.toml, restricted to Linux
+# instead of Windows. The same `platforms` mechanism is used for every
+# restriction case.
+#
+# To narrow further to a single architecture, list a single OS/arch pair:
+#
+#   platforms = ["linux-amd64"]     # Linux on amd64 only.
+#   platforms = ["linux-arm64"]     # Linux on arm64 only.
+
+[project]
+name = "linux-ops-toolkit"
+version = "0.1.0"
+description = "Container and CI tooling that only runs on Linux build hosts."
+platforms = ["linux-amd64", "linux-arm64"]
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+"Microsoft.PowerShell.PlatyPS" = "1.0.1"
+
+[tasks]
+test = "Invoke-Pester"
+
+# Multi-line script — the kind of thing you'd run on a Linux CI runner.
+build = """
+Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit
+Invoke-Pester -CI
+./package.sh
+"""
