@@ -1,0 +1,46 @@
+# version-specifiers.toml
+#
+# Demonstrates every supported way of specifying a PowerShell or module
+# version. The same syntax applies to both [powershell].version and any
+# entry in [modules].
+#
+#   "5.7.1"           exact version
+#   "1.25.0"          exact version
+#   "7.5.*"           wildcard within a minor line — any 7.5.x
+#   ">=2,<3"          range expression (comma-separated, AND)
+#   ">=5.1.1"         lower bound only
+#   "*"               any version, resolves to newest at install time
+#   "latest"          synonym of "*", resolves to newest at install time
+#   "5.7.1-rc.1"      explicit prerelease (must be requested explicitly;
+#                     "*" / "latest" never resolve to prereleases)
+
+[project]
+name = "version-specifiers"
+version = "0.1.0"
+
+[powershell]
+# A wildcard pinned to the 7.5 line: any 7.5.x release is acceptable, but
+# 7.6.x will not be selected.
+version = "7.5.*"
+
+[modules]
+# Exact versions — fully pinned, reproducible.
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+
+# Range expression — at least 5.1.1, less than 6.
+"Az.Accounts" = ">=5.1.1,<6"
+
+# Wildcard — any version of dbatools.library, resolved to newest at install.
+"dbatools.library" = "*"
+
+# Explicit "latest" — same effect as "*".
+PSReadLine = "latest"
+
+# Lower bound only — "at least this version, including future majors".
+# Use sparingly; prefer bounded ranges for reproducibility.
+"Microsoft.Graph" = ">=2.35"
+
+# Prerelease versions must be requested explicitly. "*" and "latest" never
+# resolve to prereleases.
+# Pester = "6.0.0-alpha1"

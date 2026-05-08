@@ -1,0 +1,21 @@
+# basic.toml
+#
+# A typical PowerShell development environment: a pinned PowerShell, a couple
+# of common modules, and a single task. This is what most projects will look
+# like.
+
+[project]
+name = "basic"
+version = "0.1.0"
+description = "A typical PowerShell module development environment."
+authors = ["Jane Doe <jane@example.com>"]
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+
+[tasks]
+test = "Invoke-Pester"

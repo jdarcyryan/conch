@@ -1,0 +1,11 @@
+# minimal.toml
+#
+# The smallest valid conch manifest. With no platforms field, this project
+# targets every OS/arch conch supports. With no [modules] table, only the
+# specified PowerShell distribution is installed into .conch — no extras.
+
+[project]
+name = "minimal"
+
+[powershell]
+version = "7.5.6"
