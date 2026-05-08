@@ -1,0 +1,35 @@
+# platform-restricted-win.toml
+#
+# Narrowing the project's supported platform set to Windows only.
+#
+# By default, a manifest with no `platforms` field works on every OS/arch
+# conch supports. Specifying `platforms` restricts the project to that
+# explicit list — conch refuses to install on anything outside it.
+#
+# This example targets both Windows architectures. To narrow further, you
+# can list a single OS/arch pair instead:
+#
+#   platforms = ["windows-amd64"]    # Windows on amd64 only.
+#   platforms = ["windows-arm64"]    # Windows on arm64 only.
+#
+# Any combination of OS/arch pairs is valid; the same syntax is used for
+# every restriction case (see platform-restricted-linux.toml for the
+# Linux equivalent).
+
+[project]
+name = "windows-only-toolkit"
+version = "0.1.0"
+description = "SharePoint and M365 administration tooling. Windows-only."
+platforms = ["windows-amd64", "windows-arm64"]
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+"PnP.PowerShell" = "*"
+"Microsoft.Graph" = ">=2.35"
+Pester = "5.7.1"
+
+[tasks]
+test = "Invoke-Pester"
+deploy = "./deploy.ps1"

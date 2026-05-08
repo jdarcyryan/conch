@@ -1,0 +1,137 @@
+# preferences.toml
+#
+# The [preferences] table pins PowerShell preference variables for the
+# activated environment. Each key maps to a built-in PowerShell preference
+# variable; values are validated against PowerShell's allowed set, so a
+# typo or out-of-range value will be rejected at parse time rather than
+# silently failing at runtime.
+#
+# Every key is optional. Anything you omit keeps PowerShell's default.
+
+[project]
+name = "preferences"
+version = "0.1.0"
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+
+[preferences]
+
+# --- Action preferences -----------------------------------------------------
+# These six all share the same value set:
+#   "Continue"           — print the message and keep going (default for most)
+#   "SilentlyContinue"   — suppress the message and keep going
+#   "Stop"               — turn the condition into a terminating error
+#   "Inquire"            — prompt the user for what to do
+#   "Ignore"             — like SilentlyContinue but doesn't add to error
+#                          variables
+#   "Break"              — break into the debugger
+
+# error → $ErrorActionPreference
+# Default: "Continue". Setting "Stop" makes non-terminating errors fail fast.
+error = "Stop"
+
+# warning → $WarningPreference
+# Default: "Continue".
+warning = "Continue"
+
+# verbose → $VerbosePreference
+# Default: "SilentlyContinue".
+verbose = "SilentlyContinue"
+
+# debug → $DebugPreference
+# Default: "SilentlyContinue".
+debug = "SilentlyContinue"
+
+# information → $InformationPreference
+# Default: "SilentlyContinue".
+information = "Continue"
+
+# progress → $ProgressPreference
+# Default: "Continue". Setting "SilentlyContinue" significantly speeds up
+# scripts that emit progress in tight loops (e.g. Invoke-WebRequest).
+progress = "SilentlyContinue"
+
+# --- Other enums ------------------------------------------------------------
+
+# confirm → $ConfirmPreference
+# A different value set from the action preferences above.
+# Allowed: "None", "Low", "Medium", "High"
+# Default: "High". Cmdlets with ConfirmImpact >= this value will prompt.
+confirm = "High"
+
+# error-view → $ErrorView
+# Allowed: "NormalView", "CategoryView", "ConciseView", "DetailedView"
+# Default: "ConciseView" (PS 7.2+).
+error-view = "ConciseView"
+
+# module-autoload → $PSModuleAutoLoadingPreference
+# Allowed: "None", "ModuleQualified", "All"
+# Default: "All". Set to "None" to require explicit Import-Module everywhere.
+module-autoload = "All"
+
+# native-arg-passing → $PSNativeCommandArgumentPassing  (PS 7.3+)
+# Controls how arguments are passed to native commands.
+# Allowed: "Legacy", "Standard", "Windows"
+# Default: "Standard" on non-Windows, "Windows" on Windows.
+native-arg-passing = "Standard"
+
+# --- Booleans ---------------------------------------------------------------
+
+# whatif → $WhatIfPreference
+# Allowed: true, false
+# Default: false. When true, every -SupportsShouldProcess cmdlet runs as
+# if -WhatIf were passed.
+whatif = false
+
+# native-error-action → $PSNativeCommandUseErrorActionPreference  (PS 7.3+)
+# Allowed: true, false
+# Default: false. When true, a non-zero exit from a native command honours
+# $ErrorActionPreference (so `error = "Stop"` makes native failures throw).
+native-error-action = true
+
+# --- Numbers ----------------------------------------------------------------
+
+# format-enum-limit → $FormatEnumerationLimit
+# Allowed: any non-negative integer.
+# Default: 4. How many enumerable items Format-Table will show before
+# truncating with "...".
+format-enum-limit = 4
+
+# max-history → $MaximumHistoryCount
+# Allowed: integer 1–32768.
+# Default: 4096. How many commands the session keeps in history.
+max-history = 4096
+
+# --- Strings ----------------------------------------------------------------
+
+# ofs → $OFS  (Output Field Separator)
+# Allowed: any string.
+# Default: " " (single space). Used when arrays are interpolated into
+# strings, e.g. "$array".
+ofs = " "
+
+# --- Logging (all booleans) -------------------------------------------------
+# These control whether PowerShell writes the corresponding events to the
+# session log. Useful for diagnostics; off by default to keep noise down.
+
+# log-command-health → $LogCommandHealthEvent
+log-command-health = false
+
+# log-command-lifecycle → $LogCommandLifecycleEvent
+log-command-lifecycle = false
+
+# log-engine-health → $LogEngineHealthEvent
+log-engine-health = true
+
+# log-engine-lifecycle → $LogEngineLifecycleEvent
+log-engine-lifecycle = true
+
+# log-provider-health → $LogProviderHealthEvent
+log-provider-health = true
+
+# log-provider-lifecycle → $LogProviderLifecycleEvent
+log-provider-lifecycle = false

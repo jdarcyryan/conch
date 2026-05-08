@@ -1,0 +1,46 @@
+# tasks.toml
+#
+# Demonstrates every supported form of [tasks].
+#
+# A task value is exactly one of:
+#
+#   1. A single-line string — run as a single PowerShell command.
+#   2. A multi-line string  — run as a PowerShell script. TOML's triple-
+#                             quoted syntax preserves line breaks verbatim.
+#   3. An array of strings  — joined with newlines, run as a PowerShell
+#                             script. Each element is one line of the script.
+#
+# Tasks have no other metadata. There is no `cwd`, no `description`, no
+# dependency graph — chain things together inside the script body itself.
+
+[project]
+name = "tasks"
+version = "0.1.0"
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+
+[tasks]
+# Form 1 — single-line string. The most common case.
+test = "Invoke-Pester"
+lint = "Invoke-ScriptAnalyzer -Path . -Recurse"
+
+# Form 2 — multi-line string. Runs as a single PowerShell script with line
+# breaks preserved. TOML's `"""..."""` opens and closes a multi-line string.
+ci = """
+Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit
+Invoke-Pester -CI
+"""
+
+# Form 3 — array of strings. Each element becomes one line of the script.
+# Useful when you want to keep each step on its own line for clarity.
+release = [
+    "Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit",
+    "Invoke-Pester -CI",
+    "./build.ps1",
+    "./publish.ps1",
+]

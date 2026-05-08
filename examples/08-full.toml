@@ -1,0 +1,84 @@
+# full.toml
+#
+# A realistic Azure operations environment exercising every conch manifest
+# feature in one place: full project metadata, a narrowed platform set,
+# mixed version specifiers, the three task forms, and PowerShell
+# preferences pinned for the activated environment.
+
+[project]
+name = "azure-ops"
+version = "1.4.0"
+description = "Day-to-day Azure operations toolkit for the Platform team."
+authors = [
+    "Jane Doe <jane@example.com>",
+    "John Roe <john@example.com>",
+]
+# Excluding linux-arm64 — none of the team runs ARM Linux and we don't
+# want to maintain a lockfile entry for a platform we never test.
+#
+# The same syntax can narrow by architecture across OSes, e.g.:
+#   platforms = ["windows-amd64", "linux-amd64"]   # amd64 only
+#   platforms = ["windows-arm64", "linux-arm64"]   # arm64 only
+platforms = ["windows-amd64", "windows-arm64", "linux-amd64"]
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+# Pinned exactly: tests must be deterministic.
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+
+# Bounded range: stay within a major line, accept patch and minor updates.
+"Az.Accounts" = ">=5.1.1,<6"
+"Microsoft.Graph" = ">=2.35,<3"
+
+# Wildcard line: any 7.8.x of ImportExcel is fine.
+ImportExcel = "7.8.*"
+
+# Floating: always resolve to the newest stable on install.
+"PSReadLine" = "latest"
+
+# SharePoint and M365 admin tooling.
+"PnP.PowerShell" = "*"
+
+# SQL admin library.
+"dbatools.library" = "2025.7.20"
+
+[tasks]
+# Single-line strings — the common case.
+test = "Invoke-Pester -CI"
+lint = "Invoke-ScriptAnalyzer -Path . -Recurse -Severity Warning"
+
+# Multi-line string — runs as a single PowerShell script with line breaks
+# preserved. Lint then test, abort on the first failure thanks to
+# `error = "Stop"` in [preferences] below.
+ci = """
+Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit
+Invoke-Pester -CI
+"""
+
+# Array form — joined with newlines. Useful when each step is logically
+# distinct and you want to keep them on separate lines for diffability.
+release = [
+    "Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit",
+    "Invoke-Pester -CI",
+    "./build.ps1",
+    "./publish.ps1",
+]
+
+[preferences]
+# Fail fast — cmdlet errors and (with native-error-action = true) native
+# command non-zero exits both throw, so CI scripts halt on the first issue.
+error = "Stop"
+warning = "Continue"
+verbose = "SilentlyContinue"
+
+# Speed up the report and release tasks, which emit a lot of progress.
+progress = "SilentlyContinue"
+
+# Concise stack traces in CI logs.
+error-view = "ConciseView"
+
+# Native command failures honour $ErrorActionPreference.
+native-error-action = true
