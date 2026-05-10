@@ -29,18 +29,13 @@ func defaultClient() *http.Client {
 // Resolver resolves a version specifier to a concrete PowerShell
 // release. It uses the GitHub releases API; an exact specifier short-
 // circuits the network call.
-type Resolver struct {
-	HTTP *http.Client
-}
+type Resolver struct{}
 
 // Resolve picks the newest PowerShell release that satisfies spec.
 // "*"/"latest" hits /releases/latest; everything else lists /releases
 // and applies the matcher.
-func (r *Resolver) Resolve(spec version.Spec) (Release, error) {
-	client := r.HTTP
-	if client == nil {
-		client = defaultClient()
-	}
+func (Resolver) Resolve(spec version.Spec) (Release, error) {
+	client := defaultClient()
 
 	if spec.IsAny() {
 		return fetchLatest(client)

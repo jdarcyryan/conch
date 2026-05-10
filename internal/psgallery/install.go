@@ -24,7 +24,6 @@ import (
 // UI, when non-nil, receives byte-progress updates for each download.
 type Installer struct {
 	Cache *cache.Cache
-	HTTP  *http.Client
 	UI    *ui.UI
 }
 
@@ -50,10 +49,7 @@ type Installer struct {
 // In every branch the cache is content-addressable storage; it's
 // never the source of truth.
 func (in *Installer) Install(pkg Package, modulesDir, expectedSHA256 string) (string, error) {
-	client := in.HTTP
-	if client == nil {
-		client = defaultClient()
-	}
+	client := defaultClient()
 
 	cacheName := fmt.Sprintf("%s.%s.nupkg",
 		strings.ToLower(pkg.Name), strings.ToLower(pkg.Version.String()))

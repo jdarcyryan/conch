@@ -17,21 +17,6 @@ func fixedTime(mode Mode, now time.Time) (*UI, *bytes.Buffer, *bytes.Buffer) {
 	return u, out, err
 }
 
-func TestParseMode(t *testing.T) {
-	cases := map[string]Mode{
-		"":      ModeAuto,
-		"auto":  ModeAuto,
-		"tui":   ModeTUI,
-		"log":   ModeLog,
-		"bogus": ModeAuto,
-	}
-	for in, want := range cases {
-		if got := ParseMode(in); got != want {
-			t.Errorf("ParseMode(%q) = %v, want %v", in, got, want)
-		}
-	}
-}
-
 func TestLogModeFormatsTimestamps(t *testing.T) {
 	u, out, _ := fixedTime(ModeLog, time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC))
 	u.Step("resolving %s", "PowerShell 7.5.6")

@@ -44,7 +44,6 @@ func DownloadURL(rel Release, name string) string {
 // is below noise level.
 type Installer struct {
 	Cache *cache.Cache
-	HTTP  *http.Client
 	UI    *ui.UI
 }
 
@@ -63,10 +62,7 @@ type Installer struct {
 //     verify the archive. The cache is *not* trusted as a hash
 //     source — it only ever holds bytes.
 func (in *Installer) Install(rel Release, p platform.Platform, targetDir, expectedSHA256 string) (string, error) {
-	client := in.HTTP
-	if client == nil {
-		client = defaultClient()
-	}
+	client := defaultClient()
 
 	name := ArtefactName(rel, p)
 	expectedHash := expectedSHA256

@@ -26,17 +26,14 @@ type Package struct {
 }
 
 // defaultClient returns an HTTP client tuned for talking to PSGallery —
-// modest timeout, no global state. Used when a Client/Installer is
-// constructed without an explicit HTTP override.
+// modest timeout, no global state.
 func defaultClient() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-// Client is a thin wrapper around an HTTP client that knows the
-// OData feed.
-type Client struct {
-	HTTP *http.Client
-}
+// Client is the OData feed front-end. The zero value is usable;
+// construct via &Client{} from the cli wiring.
+type Client struct{}
 
 // Resolve returns the newest package version for name that satisfies
 // spec.
@@ -65,10 +62,7 @@ func (c *Client) Resolve(name string, spec version.Spec) (Package, error) {
 // Pagination is handled transparently — each Atom response carries a
 // `<link rel="next" href="...">` if there are more pages.
 func (c *Client) ListVersions(name string) ([]Package, error) {
-	client := c.HTTP
-	if client == nil {
-		client = defaultClient()
-	}
+	client := defaultClient()
 	out := []Package{}
 	next := fmt.Sprintf(findPackagesByIDFmt, url.QueryEscape(name))
 	for next != "" {

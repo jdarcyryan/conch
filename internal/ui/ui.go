@@ -34,20 +34,6 @@ const (
 	ModeLog
 )
 
-// ParseMode decodes a TOML or flag value. Empty/unrecognised falls
-// back to ModeAuto.
-func ParseMode(s string) Mode {
-	switch s {
-	case "tui":
-		return ModeTUI
-	case "log":
-		return ModeLog
-	case "auto", "":
-		return ModeAuto
-	}
-	return ModeAuto
-}
-
 // UI is the front-end shared by every conch command. Methods are safe
 // for concurrent use; the embedded mutex serialises bar repaints, the
 // spinner goroutine, and status messages so they never tear.
@@ -81,8 +67,8 @@ func newRenderer(mode Mode, stdout, stderr io.Writer) *UI {
 }
 
 // Resolve returns a UI honouring an explicit mode where possible,
-// falling back to TTY-based auto-detection. Used by the CLI to combine
-// flag, toml, and stdout-shape inputs.
+// falling back to TTY-based auto-detection. Used by the CLI to fold
+// the --min-ui flag and stdout's shape into a single decision.
 func Resolve(explicit Mode, stdout, stderr *os.File) *UI {
 	if explicit == ModeAuto {
 		mode := ModeLog
@@ -93,10 +79,6 @@ func Resolve(explicit Mode, stdout, stderr *os.File) *UI {
 	}
 	return newRenderer(explicit, stdout, stderr)
 }
-
-// Mode returns the resolved mode (never ModeAuto — that has been
-// flattened to TUI or Log at construction time).
-func (u *UI) Mode() Mode { return u.mode }
 
 // Step announces a new in-progress operation.
 //
