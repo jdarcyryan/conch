@@ -37,9 +37,16 @@ func (d *Download) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// Done finalises the download. In TUI mode it replaces the bar with a
-// completion line; in log mode it prints a one-line summary with
-// elapsed time and average speed.
+// Done finalises the download.
+//
+// TUI mode: the bar is cleared and nothing replaces it. The
+// surrounding Step ("Installing PowerShell into ...") already told
+// the user what was running; once the download is done that line
+// disappears entirely so the next Step starts on a clean row.
+//
+// Log mode: a one-line summary with elapsed time and average speed,
+// because there's no animated bar to clear and the line is the only
+// signal the download finished at all.
 func (d *Download) Done() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -48,17 +55,14 @@ func (d *Download) Done() {
 	}
 	d.finished = true
 
-	elapsed := d.ui.now().Sub(d.started)
-	speed := bytesPerSec(d.written, elapsed)
-
 	switch d.ui.mode {
 	case ModeTUI:
 		d.ui.mu.Lock()
 		fmt.Fprint(d.ui.out, ansiClearLine)
-		fmt.Fprintf(d.ui.out, "%s%s %s%s  %s in %s (%s/s)\n",
-			ansiGreen, "✓", ansiReset, d.name, fmtBytes(d.written), fmtDuration(elapsed), fmtBytes(speed))
 		d.ui.mu.Unlock()
 	case ModeLog:
+		elapsed := d.ui.now().Sub(d.started)
+		speed := bytesPerSec(d.written, elapsed)
 		d.ui.line("info", "✓ ", "downloaded %s (%s in %s, %s/s)",
 			d.name, fmtBytes(d.written), fmtDuration(elapsed), fmtBytes(speed))
 	}
@@ -94,22 +98,30 @@ func (d *Download) maybeDrawLocked() {
 	fmt.Fprint(d.ui.out, ansiClearLine+d.renderBar())
 }
 
-// renderBar formats one frame of the progress bar. Width is a fixed
-// 30 cells — terminal-width detection without bringing in a TTY library
-// is more trouble than it's worth, and 30 cells works comfortably in
-// any reasonable terminal.
+// renderBar formats one frame of the progress bar.
+//
+// Width is kept tight on purpose — about 45 visible columns at the
+// busiest case ("[20-cell bar] 100% 999.9 MB/999.9 MB"). A wider
+// frame wraps in a narrow terminal, and once it wraps, \r\x1b[2K
+// only clears the line the cursor's on (the wrap remainder), leaving
+// the first portion of the previous frame on screen — that's the
+// "tiling bar" failure mode. 45 chars fits inside any 60-col+
+// terminal without wrapping.
+//
+// The filename is deliberately omitted: the surrounding Step (e.g.
+// "Installing PowerShell into …") already named the download, and a
+// 30-char filename would push us straight back into wrap territory.
 func (d *Download) renderBar() string {
-	const width = 30
+	const width = 20
 	written := d.written
-	speed := bytesPerSec(written, d.ui.now().Sub(d.started))
 	if d.total <= 0 {
-		// Indeterminate: show a moving dot pattern so the user knows
-		// progress is happening.
+		// Indeterminate: a single moving dot so the user knows
+		// something's happening when Content-Length is missing.
 		dots := strings.Repeat(" ", width)
 		i := int(written/4096) % width
 		dots = dots[:i] + "·" + dots[i+1:]
-		return fmt.Sprintf("%s%s%s [%s] %s  %s/s",
-			ansiDim, "  ", ansiReset, dots, fmtBytes(written), fmtBytes(speed))
+		return fmt.Sprintf("  [%s%s%s]  %s",
+			ansiDim, dots, ansiReset, fmtBytes(written))
 	}
 
 	pct := float64(written) / float64(d.total)
@@ -119,18 +131,12 @@ func (d *Download) renderBar() string {
 	filled := int(pct * float64(width))
 	bar := ansiGreen + strings.Repeat("█", filled) + ansiDim + strings.Repeat("░", width-filled) + ansiReset
 
-	return fmt.Sprintf("  %s [%s] %3d%%  %s/%s  %s/s",
-		truncate(d.name, 32), bar, int(pct*100),
-		fmtBytes(written), fmtBytes(d.total), fmtBytes(speed))
+	return fmt.Sprintf("  [%s] %3d%% %s/%s",
+		bar, int(pct*100), fmtBytes(written), fmtBytes(d.total))
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s + strings.Repeat(" ", max-len(s))
-	}
-	return s[:max-1] + "…"
-}
-
+// bytesPerSec is used by Done's log-mode summary (TUI mode no longer
+// shows speed inline so the bar doesn't need it).
 func bytesPerSec(n int64, elapsed time.Duration) int64 {
 	secs := elapsed.Seconds()
 	if secs <= 0 {
