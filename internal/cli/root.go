@@ -18,8 +18,9 @@ import (
 // construction; the install RunE handler reads it after parsing.
 var minUI bool
 
-// New constructs the root cobra command. version is the only build
-// metadata we surface — bare semver, no commit/date noise.
+// New constructs the root cobra command. commit and date are accepted
+// for goreleaser's -ldflags injection but only the bare version is
+// surfaced; --version intentionally stays uncluttered.
 func New(version, commit, date string) *cobra.Command {
 	_ = commit
 	_ = date
@@ -31,7 +32,7 @@ func New(version, commit, date string) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		// Version flag is auto-registered on root only when this is set —
-		// `conch list --version` etc. already error out as "unknown flag",
+		// `conch summary --version` etc. error out as "unknown flag",
 		// which is the behaviour we want.
 		Version: version,
 	}
