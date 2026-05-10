@@ -1,6 +1,9 @@
 # JetBrains GoLand
 .idea/
 
+# Claude settings
+.claude/
+
 # Build
 .output
 *.syso
