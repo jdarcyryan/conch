@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jdarcyryan/conch/internal/manifest"
 	"github.com/jdarcyryan/conch/internal/platform"
 )
 
@@ -32,14 +33,8 @@ func runTask(name string, extraArgs []string) error {
 		return err
 	}
 
-	found := false
-	for _, t := range m.Tasks {
-		if t.Name == name {
-			found = true
-			break
-		}
-	}
-	if !found {
+	taskLines, ok := lookupTaskLines(m, name)
+	if !ok {
 		return fmt.Errorf("no task named %q", name)
 	}
 
@@ -54,12 +49,12 @@ func runTask(name string, extraArgs []string) error {
 		)
 	}
 
-	u := newUI(m.Output.Mode)
+	u := newUI()
 	if err := ensureInstalled(u, m, layout, host, true); err != nil {
 		return err
 	}
 
-	psArgs := []string{"-Command", layout.TaskScript(name)}
+	psArgs := []string{"-Command", layout.TaskScript(taskLines)}
 	psArgs = append(psArgs, extraArgs...)
 
 	cmd, err := launchPwsh(layout, psArgs)
@@ -67,4 +62,16 @@ func runTask(name string, extraArgs []string) error {
 		return err
 	}
 	return exitWith(cmd.Run())
+}
+
+// lookupTaskLines returns the body of the named task as a slice of
+// script lines. Task bodies live exclusively in conch.toml; this is
+// re-read on every invocation so edits take effect immediately.
+func lookupTaskLines(m *manifest.Manifest, name string) ([]string, bool) {
+	for _, t := range m.Tasks {
+		if t.Name == name {
+			return t.Lines, true
+		}
+	}
+	return nil, false
 }

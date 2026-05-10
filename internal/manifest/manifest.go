@@ -20,15 +20,6 @@ type Manifest struct {
 	Modules     []Module
 	Tasks       []Task
 	Preferences Preferences
-	Output      Output
-}
-
-// Output controls how conch's CLI commands render progress and status.
-// Empty values mean "auto-detect" — see internal/ui.ModeAuto.
-type Output struct {
-	// Mode is one of "tui", "log", or "auto" (or empty, treated as
-	// "auto"). Anything else is rejected at parse time.
-	Mode string `toml:"mode"`
 }
 
 // Project holds the [project] table.
@@ -88,16 +79,5 @@ func (m *Manifest) validate() error {
 	if len(m.Project.Platforms) == 0 {
 		m.Project.Platforms = platform.All()
 	}
-	if err := m.Output.validate(); err != nil {
-		return err
-	}
 	return nil
-}
-
-func (o Output) validate() error {
-	switch o.Mode {
-	case "", "auto", "tui", "log":
-		return nil
-	}
-	return fmt.Errorf("[output].mode = %q: must be one of \"tui\", \"log\", \"auto\"", o.Mode)
 }

@@ -66,12 +66,22 @@ func (l Layout) ActivateContent(m *manifest.Manifest) (string, error) {
 	//
 	// Both paths use Resolve-Path -ErrorAction Stop so a missing
 	// directory becomes a hard failure rather than a silent fallback
-	// to whatever the host shell had.
+	// to whatever the host shell had. The two scratch variables are
+	// removed once PSModulePath is composed so a sourced session
+	// doesn't carry conch internals around.
 	b.WriteString("$conchModules = (Resolve-Path -ErrorAction Stop -LiteralPath (Join-Path $PSScriptRoot 'modules')).Path\n")
 	b.WriteString("$pwshBundled = (Resolve-Path -ErrorAction Stop -LiteralPath (Join-Path $PSScriptRoot 'pwsh' 'Modules')).Path\n")
-	b.WriteString("$env:PSModulePath = $conchModules + [IO.Path]::PathSeparator + $pwshBundled\n\n")
+	b.WriteString("$env:PSModulePath = $conchModules + [IO.Path]::PathSeparator + $pwshBundled\n")
+	b.WriteString("Remove-Variable -Name conchModules, pwshBundled -ErrorAction SilentlyContinue\n\n")
 
 	// Preferences.
+	//
+	// Tasks are deliberately *not* rendered here. They're read fresh
+	// from conch.toml on every `conch run` invocation and inlined
+	// after this script is sourced — that way an edit to [tasks] in
+	// the manifest takes effect immediately without rewriting
+	// activate.ps1 (and without leaving stale function definitions
+	// behind when tasks are renamed or removed).
 	prefs := orderedPreferences(m.Preferences)
 	if len(prefs) > 0 {
 		b.WriteString("# Preferences\n")
@@ -81,16 +91,6 @@ func (l Layout) ActivateContent(m *manifest.Manifest) (string, error) {
 				return "", err
 			}
 			b.WriteString(line)
-			b.WriteString("\n")
-		}
-		b.WriteString("\n")
-	}
-
-	// Tasks → functions.
-	if len(m.Tasks) > 0 {
-		b.WriteString("# Tasks\n")
-		for _, t := range m.Tasks {
-			b.WriteString(renderTaskFunction(t))
 			b.WriteString("\n")
 		}
 	}
@@ -159,27 +159,6 @@ func renderPreference(p preferenceMapping) (string, error) {
 	return "", fmt.Errorf("unsupported preference type for %s", p.tomlKey)
 }
 
-func renderTaskFunction(t manifest.Task) string {
-	var b strings.Builder
-	b.WriteString("function ")
-	b.WriteString(taskFunctionName(t.Name))
-	b.WriteString(" {\n")
-	for _, line := range t.Lines {
-		b.WriteString("    ")
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
-// taskFunctionName converts a manifest task name into a PowerShell
-// function name. Hyphens are common in task names ("test-ci"); they
-// are preserved because they're valid in PS function names.
-func taskFunctionName(name string) string {
-	return "conch_task_" + name
-}
-
 // PSSingleQuote renders s as a PowerShell single-quoted literal. Single
 // quotes inside the input are doubled, matching PowerShell's escape
 // convention.
@@ -187,15 +166,22 @@ func PSSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
-// TaskScript returns the PowerShell snippet that runs `name` after the
-// activation script has been sourced. This is what `conch run` feeds
-// to pwsh -Command.
+// TaskScript returns the PowerShell snippet that sources activate.ps1
+// and then runs the supplied task body verbatim. Each line in
+// taskLines becomes one line of script — single-line, multi-line, and
+// array task forms in conch.toml all reach this function as the same
+// []string shape thanks to the manifest parser.
 //
 // activate.ps1 itself uses $PSScriptRoot for relative resolution — so
-// here we sourcing it via its absolute path is fine: $PSScriptRoot is
+// sourcing it via its absolute path is fine: $PSScriptRoot is
 // computed from however the script is invoked, not from the calling
 // shell's CWD.
-func (l Layout) TaskScript(name string) string {
-	return fmt.Sprintf(". %s\n%s",
-		PSSingleQuote(l.ActivateScript()), taskFunctionName(name))
+func (l Layout) TaskScript(taskLines []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, ". %s\n", PSSingleQuote(l.ActivateScript()))
+	for _, line := range taskLines {
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }

@@ -41,7 +41,7 @@ emit machine-readable JSON, YAML, TOML, or XML instead.`,
 func runTasks(m *manifest.Manifest, format string) error {
 	if format == "" {
 		// Side-effect: prints the conch banner in TUI mode.
-		_ = newUI(m.Output.Mode)
+		_ = newUI()
 		printHumanTasks(m)
 		return nil
 	}
@@ -74,16 +74,16 @@ func runTasks(m *manifest.Manifest, format string) error {
 
 // tasksView is the encoder DTO for `conch tasks --format`. The XML
 // shape uses flat `<task>` repetition for the same omitempty reason
-// listView documents.
+// summaryView documents.
 type tasksView struct {
-	XMLName xml.Name   `json:"-" yaml:"-" toml:"-" xml:"tasks"`
-	Tasks   []listTask `json:"tasks" yaml:"tasks" toml:"tasks" xml:"task"`
+	XMLName xml.Name      `json:"-" yaml:"-" toml:"-" xml:"tasks"`
+	Tasks   []summaryTask `json:"tasks" yaml:"tasks" toml:"tasks" xml:"task"`
 }
 
 func tasksToView(m *manifest.Manifest) tasksView {
-	v := tasksView{Tasks: make([]listTask, 0, len(m.Tasks))}
+	v := tasksView{Tasks: make([]summaryTask, 0, len(m.Tasks))}
 	for _, t := range m.Tasks {
-		v.Tasks = append(v.Tasks, listTask{Name: t.Name, Lines: t.Lines})
+		v.Tasks = append(v.Tasks, summaryTask{Name: t.Name, Lines: t.Lines})
 	}
 	return v
 }

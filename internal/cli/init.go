@@ -170,13 +170,4 @@ version = %q
 # log-engine-lifecycle  = true
 # log-provider-health   = true
 # log-provider-lifecycle = false
-
-
-# [output]
-# # Controls how conch CLI commands render progress and status:
-# #   "tui"  — colourful single-line progress bars (default for terminals)
-# #   "log"  — timestamped, level-prefixed lines (default for non-TTY)
-# #   "auto" — pick at runtime based on whether stdout is a terminal
-# # Override with 'conch install --min-ui' (-m) for a single invocation.
-# mode = "auto"
 `

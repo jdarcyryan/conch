@@ -52,7 +52,7 @@ func runInstall() error {
 		)
 	}
 
-	u := newUI(m.Output.Mode)
+	u := newUI()
 	return ensureInstalled(u, m, layout, host, true)
 }
 

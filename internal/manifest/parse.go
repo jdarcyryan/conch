@@ -20,7 +20,6 @@ type rawManifest struct {
 	Modules     map[string]string  `toml:"modules"`
 	Tasks       map[string]rawTask `toml:"tasks"`
 	Preferences Preferences        `toml:"preferences"`
-	Output      Output             `toml:"output"`
 }
 
 type rawProject struct {
@@ -130,7 +129,6 @@ func convert(raw rawManifest) (*Manifest, error) {
 			Authors:     raw.Project.Authors,
 		},
 		Preferences: raw.Preferences,
-		Output:      raw.Output,
 	}
 
 	for _, s := range raw.Project.Platforms {

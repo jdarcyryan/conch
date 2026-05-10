@@ -43,7 +43,7 @@ before the shell starts.`,
 				)
 			}
 
-			u := newUI(m.Output.Mode)
+			u := newUI()
 			if err := ensureInstalled(u, m, layout, host, true); err != nil {
 				return err
 			}

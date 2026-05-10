@@ -14,10 +14,10 @@ import (
 	"github.com/jdarcyryan/conch/internal/manifest"
 )
 
-func newListCmd() *cobra.Command {
+func newSummaryCmd() *cobra.Command {
 	var format string
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   "summary",
 		Short: "Print a summary of the project's manifest",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -25,7 +25,7 @@ func newListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runList(m, format)
+			return runSummary(m, format)
 		},
 	}
 	cmd.Flags().StringVarP(&format, "format", "f", "",
@@ -33,15 +33,15 @@ func newListCmd() *cobra.Command {
 	return cmd
 }
 
-func runList(m *manifest.Manifest, format string) error {
+func runSummary(m *manifest.Manifest, format string) error {
 	if format == "" {
 		// Side-effect: prints the conch banner in TUI mode.
-		_ = newUI(m.Output.Mode)
-		printHumanList(m)
+		_ = newUI()
+		printHumanSummary(m)
 		return nil
 	}
 
-	view := manifestToView(m)
+	view := manifestToSummary(m)
 	switch strings.ToLower(format) {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
@@ -67,9 +67,9 @@ func runList(m *manifest.Manifest, format string) error {
 	return fmt.Errorf("unknown format %q: must be one of json, yaml, toml, xml", format)
 }
 
-// listView is the common DTO every -f format encodes from. Field tags
-// are duplicated for each codec because Go encoders don't share a
-// vocabulary, but the layout is the same across all four formats.
+// summaryView is the common DTO every -f format encodes from. Field
+// tags are duplicated for each codec because Go encoders don't share
+// a vocabulary, but the layout is the same across all four formats.
 //
 // XML uses flat repetition (`<module>`, `<task>`, `<author>`,
 // `<platform>` directly under their parent element) rather than the
@@ -77,16 +77,15 @@ func runList(m *manifest.Manifest, format string) error {
 // omitempty does not suppress nested wrappers when the inner slice
 // is empty, so the wrapper would produce an empty `<modules></modules>`
 // — the flat form sidesteps that without a custom MarshalXML.
-type listView struct {
-	XMLName    xml.Name     `json:"-" yaml:"-" toml:"-" xml:"conch"`
-	Project    listProject  `json:"project" yaml:"project" toml:"project" xml:"project"`
-	PowerShell listPwsh     `json:"powershell" yaml:"powershell" toml:"powershell" xml:"powershell"`
-	Modules    []listModule `json:"modules,omitempty" yaml:"modules,omitempty" toml:"modules,omitempty" xml:"module,omitempty"`
-	Tasks      []listTask   `json:"tasks,omitempty" yaml:"tasks,omitempty" toml:"tasks,omitempty" xml:"task,omitempty"`
-	Output     *listOutCfg  `json:"output,omitempty" yaml:"output,omitempty" toml:"output,omitempty" xml:"output,omitempty"`
+type summaryView struct {
+	XMLName    xml.Name        `json:"-" yaml:"-" toml:"-" xml:"conch"`
+	Project    summaryProject  `json:"project" yaml:"project" toml:"project" xml:"project"`
+	PowerShell summaryPwsh     `json:"powershell" yaml:"powershell" toml:"powershell" xml:"powershell"`
+	Modules    []summaryModule `json:"modules,omitempty" yaml:"modules,omitempty" toml:"modules,omitempty" xml:"module,omitempty"`
+	Tasks      []summaryTask   `json:"tasks,omitempty" yaml:"tasks,omitempty" toml:"tasks,omitempty" xml:"task,omitempty"`
 }
 
-type listProject struct {
+type summaryProject struct {
 	Name        string   `json:"name" yaml:"name" toml:"name" xml:"name"`
 	Version     string   `json:"version,omitempty" yaml:"version,omitempty" toml:"version,omitempty" xml:"version,omitempty"`
 	Description string   `json:"description,omitempty" yaml:"description,omitempty" toml:"description,omitempty" xml:"description,omitempty"`
@@ -94,51 +93,46 @@ type listProject struct {
 	Platforms   []string `json:"platforms" yaml:"platforms" toml:"platforms" xml:"platform"`
 }
 
-type listPwsh struct {
+type summaryPwsh struct {
 	Version string `json:"version" yaml:"version" toml:"version" xml:"version"`
 }
 
-type listModule struct {
+type summaryModule struct {
 	Name string `json:"name" yaml:"name" toml:"name" xml:"name,attr"`
 	Spec string `json:"spec" yaml:"spec" toml:"spec" xml:",chardata"`
 }
 
-type listTask struct {
+// summaryTask is shared with the tasks subcommand — both render the
+// same task shape for their --format outputs.
+type summaryTask struct {
 	Name  string   `json:"name" yaml:"name" toml:"name" xml:"name,attr"`
 	Lines []string `json:"lines" yaml:"lines" toml:"lines" xml:"line"`
 }
 
-type listOutCfg struct {
-	Mode string `json:"mode,omitempty" yaml:"mode,omitempty" toml:"mode,omitempty" xml:"mode,omitempty"`
-}
-
-func manifestToView(m *manifest.Manifest) listView {
-	v := listView{
-		Project: listProject{
+func manifestToSummary(m *manifest.Manifest) summaryView {
+	v := summaryView{
+		Project: summaryProject{
 			Name:        m.Project.Name,
 			Version:     m.Project.Version,
 			Description: m.Project.Description,
 			Authors:     m.Project.Authors,
 			Platforms:   make([]string, len(m.Project.Platforms)),
 		},
-		PowerShell: listPwsh{Version: m.PowerShell.Version.Raw()},
+		PowerShell: summaryPwsh{Version: m.PowerShell.Version.Raw()},
 	}
 	for i, p := range m.Project.Platforms {
 		v.Project.Platforms[i] = p.String()
 	}
 	for _, mod := range m.Modules {
-		v.Modules = append(v.Modules, listModule{Name: mod.Name, Spec: mod.Spec.Raw()})
+		v.Modules = append(v.Modules, summaryModule{Name: mod.Name, Spec: mod.Spec.Raw()})
 	}
 	for _, t := range m.Tasks {
-		v.Tasks = append(v.Tasks, listTask{Name: t.Name, Lines: t.Lines})
-	}
-	if m.Output.Mode != "" {
-		v.Output = &listOutCfg{Mode: m.Output.Mode}
+		v.Tasks = append(v.Tasks, summaryTask{Name: t.Name, Lines: t.Lines})
 	}
 	return v
 }
 
-func printHumanList(m *manifest.Manifest) {
+func printHumanSummary(m *manifest.Manifest) {
 	fmt.Println("project:")
 	fmt.Printf("  name        %s\n", m.Project.Name)
 	if m.Project.Version != "" {

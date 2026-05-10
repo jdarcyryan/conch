@@ -46,7 +46,7 @@ func New(version, commit, date string) *cobra.Command {
 		newInstallCmd(),
 		newShellCmd(),
 		newRunCmd(),
-		newListCmd(),
+		newSummaryCmd(),
 		newTasksCmd(),
 	)
 	return root
@@ -55,26 +55,25 @@ func New(version, commit, date string) *cobra.Command {
 // resolveUIMode returns the effective ui.Mode for one command
 // invocation. Priority:
 //
-//  1. install's --min-ui / -m flag forces ModeLog.
-//  2. tomlMode from [output].mode in conch.toml.
-//  3. ui.ModeAuto, which ui.Resolve flattens to TUI or Log based on
+//  1. install/run/shell's --min-ui / -m flag forces ModeLog.
+//  2. ui.ModeAuto, which ui.Resolve flattens to TUI or Log based on
 //     stdout TTY-ness.
-func resolveUIMode(tomlMode string) ui.Mode {
+//
+// Output mode is intentionally not configurable from conch.toml —
+// rendering is a per-invocation choice, not a project property.
+func resolveUIMode() ui.Mode {
 	if minUI {
 		return ui.ModeLog
 	}
-	return ui.ParseMode(tomlMode)
+	return ui.ModeAuto
 }
 
-// newUI builds a UI honouring flags + manifest output config + TTY
-// detection. tomlMode may be empty when no manifest has been loaded
-// yet (e.g. `conch init`).
-//
+// newUI builds a UI honouring the --min-ui flag plus TTY detection.
 // In TUI mode the conch ASCII banner is written to stdout once, here,
 // so every command that goes through this constructor gets the same
 // header. Log mode stays clean.
-func newUI(tomlMode string) *ui.UI {
-	u := ui.Resolve(resolveUIMode(tomlMode), os.Stdout, os.Stderr)
+func newUI() *ui.UI {
+	u := ui.Resolve(resolveUIMode(), os.Stdout, os.Stderr)
 	u.Banner()
 	return u
 }

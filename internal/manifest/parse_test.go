@@ -21,7 +21,6 @@ func TestExamplesParse(t *testing.T) {
 		"06-platform-restricted-linux.toml",
 		"07-preferences.toml",
 		"08-full.toml",
-		"09-output.toml",
 	}
 	for _, f := range files {
 		t.Run(f, func(t *testing.T) {
@@ -143,22 +142,6 @@ max-history = 100000
 `), "test")
 	if err == nil {
 		t.Fatal("expected error for out-of-range max-history, got nil")
-	}
-}
-
-func TestOutputModeRejectsUnknown(t *testing.T) {
-	_, err := Parse([]byte(`
-[project]
-name = "x"
-
-[powershell]
-version = "7.5.6"
-
-[output]
-mode = "fancy"
-`), "test")
-	if err == nil {
-		t.Fatal("expected error for unknown output mode")
 	}
 }
 
