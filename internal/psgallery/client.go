@@ -25,11 +25,6 @@ type Package struct {
 	SHA512Base64 string // PackageHash from PSGallery (raw bytes, base64-encoded)
 }
 
-// HTTPClient is the minimum interface this package needs from net/http.
-type HTTPClient interface {
-	Get(url string) (*http.Response, error)
-}
-
 // defaultClient returns an HTTP client tuned for talking to PSGallery —
 // modest timeout, no global state. Used when a Client/Installer is
 // constructed without an explicit HTTP override.
@@ -37,9 +32,10 @@ func defaultClient() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-// Client is a thin wrapper around HTTPClient that knows the OData feed.
+// Client is a thin wrapper around an HTTP client that knows the
+// OData feed.
 type Client struct {
-	HTTP HTTPClient
+	HTTP *http.Client
 }
 
 // Resolve returns the newest package version for name that satisfies
@@ -133,7 +129,7 @@ type odataProperties struct {
 	PackageHashAlgorithm string `xml:"PackageHashAlgorithm"`
 }
 
-func getFeed(client HTTPClient, url string) (*atomFeed, error) {
+func getFeed(client *http.Client, url string) (*atomFeed, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
@@ -184,5 +180,3 @@ func truncate(b []byte, n int) string {
 	}
 	return string(b[:n]) + "…"
 }
-
-var _ HTTPClient = (*http.Client)(nil)

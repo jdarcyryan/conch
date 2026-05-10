@@ -18,12 +18,6 @@ type Release struct {
 	Version version.Version
 }
 
-// HTTPClient is the minimum the resolver needs from net/http; trivially
-// stubbed in tests.
-type HTTPClient interface {
-	Get(url string) (*http.Response, error)
-}
-
 // defaultClient returns an HTTP client tuned for talking to the GitHub
 // API and download endpoints — modest timeout, no global state. Used
 // when a Resolver/Installer is constructed without an explicit HTTP
@@ -36,7 +30,7 @@ func defaultClient() *http.Client {
 // release. It uses the GitHub releases API; an exact specifier short-
 // circuits the network call.
 type Resolver struct {
-	HTTP HTTPClient
+	HTTP *http.Client
 }
 
 // Resolve picks the newest PowerShell release that satisfies spec.
@@ -78,7 +72,7 @@ type ghRelease struct {
 	Prerelease bool   `json:"prerelease"`
 }
 
-func fetchLatest(client HTTPClient) (Release, error) {
+func fetchLatest(client *http.Client) (Release, error) {
 	var rel ghRelease
 	if err := getJSON(client, releaseLatestURL, &rel); err != nil {
 		return Release{}, fmt.Errorf("fetch latest release: %w", err)
@@ -86,7 +80,7 @@ func fetchLatest(client HTTPClient) (Release, error) {
 	return parseRelease(rel)
 }
 
-func fetchAllReleases(client HTTPClient) ([]Release, error) {
+func fetchAllReleases(client *http.Client) ([]Release, error) {
 	var raw []ghRelease
 	if err := getJSON(client, releasesListURL, &raw); err != nil {
 		return nil, fmt.Errorf("fetch releases: %w", err)
@@ -116,7 +110,7 @@ func parseRelease(r ghRelease) (Release, error) {
 	return Release{Tag: tag, Version: v}, nil
 }
 
-func getJSON(client HTTPClient, url string, dst any) error {
+func getJSON(client *http.Client, url string, dst any) error {
 	resp, err := client.Get(url)
 	if err != nil {
 		return err

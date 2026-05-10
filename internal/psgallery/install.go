@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ import (
 // UI, when non-nil, receives byte-progress updates for each download.
 type Installer struct {
 	Cache *cache.Cache
-	HTTP  HTTPClient
+	HTTP  *http.Client
 	UI    *ui.UI
 }
 
@@ -139,7 +140,7 @@ func fileMatchesSHA512(path, expectedBase64 string) (bool, error) {
 //
 // When u is non-nil it receives byte-progress updates so the caller
 // can render a bar.
-func downloadAndVerify(client HTTPClient, pkg Package, w io.Writer, u *ui.UI) error {
+func downloadAndVerify(client *http.Client, pkg Package, w io.Writer, u *ui.UI) error {
 	if pkg.URL == "" {
 		return fmt.Errorf("package %s %s has no download URL", pkg.Name, pkg.Version)
 	}

@@ -62,29 +62,25 @@ type UI struct {
 	activeStep *spinningStep
 }
 
-// New returns a UI rendering to the given streams.
-func New(mode Mode, stdout, stderr io.Writer) *UI {
+// newRenderer returns a UI rendering to the given streams. Constructor
+// is package-private; external callers go through Resolve, which
+// flattens ModeAuto into TUI or Log based on TTY detection.
+func newRenderer(mode Mode, stdout, stderr io.Writer) *UI {
 	return &UI{mode: mode, out: stdout, err: stderr, now: time.Now}
 }
 
-// Auto picks ModeTUI when stdout is an interactive terminal, ModeLog
-// otherwise.
-func Auto(stdout, stderr *os.File) *UI {
-	mode := ModeLog
-	if IsTerminal(stdout) {
-		mode = ModeTUI
-	}
-	return New(mode, stdout, stderr)
-}
-
 // Resolve returns a UI honouring an explicit mode where possible,
-// falling back to the auto-detect rules. Used by the CLI to combine
-// flag, toml, and TTY inputs.
+// falling back to TTY-based auto-detection. Used by the CLI to combine
+// flag, toml, and stdout-shape inputs.
 func Resolve(explicit Mode, stdout, stderr *os.File) *UI {
 	if explicit == ModeAuto {
-		return Auto(stdout, stderr)
+		mode := ModeLog
+		if IsTerminal(stdout) {
+			mode = ModeTUI
+		}
+		return newRenderer(mode, stdout, stderr)
 	}
-	return New(explicit, stdout, stderr)
+	return newRenderer(explicit, stdout, stderr)
 }
 
 // Mode returns the resolved mode (never ModeAuto — that has been

@@ -44,7 +44,7 @@ func DownloadURL(rel Release, name string) string {
 // is below noise level.
 type Installer struct {
 	Cache *cache.Cache
-	HTTP  HTTPClient
+	HTTP  *http.Client
 	UI    *ui.UI
 }
 
@@ -116,7 +116,7 @@ func (in *Installer) Install(rel Release, p platform.Platform, targetDir, expect
 //
 // The file itself is small (a few KB) so re-downloading per install
 // is cheap.
-func fetchHashesLive(client HTTPClient, rel Release) (map[string]string, error) {
+func fetchHashesLive(client *http.Client, rel Release) (map[string]string, error) {
 	url := fmt.Sprintf(releaseDownloadFmt, rel.Tag, hashesFilename)
 	resp, err := client.Get(url)
 	if err != nil {
@@ -134,7 +134,7 @@ func fetchHashesLive(client HTTPClient, rel Release) (map[string]string, error) 
 // Content-Length off the response so the bar can show a real
 // percentage; servers that omit it degrade gracefully to an
 // indeterminate spinner inside the UI.
-func downloadWithProgress(client HTTPClient, url string, w io.Writer, u *ui.UI, name string) error {
+func downloadWithProgress(client *http.Client, url string, w io.Writer, u *ui.UI, name string) error {
 	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", url, err)
@@ -265,6 +265,3 @@ func safeJoin(dest, name string) (string, error) {
 	}
 	return filepath.Join(dest, clean), nil
 }
-
-// Compile-time assurance: net/http.Client satisfies HTTPClient.
-var _ HTTPClient = (*http.Client)(nil)

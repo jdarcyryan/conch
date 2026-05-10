@@ -12,7 +12,7 @@ import (
 func fixedTime(mode Mode, now time.Time) (*UI, *bytes.Buffer, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	err := &bytes.Buffer{}
-	u := New(mode, out, err)
+	u := newRenderer(mode, out, err)
 	u.now = func() time.Time { return now }
 	return u, out, err
 }
