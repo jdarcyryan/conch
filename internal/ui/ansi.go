@@ -16,6 +16,7 @@ const (
 	ansiRed        = "\x1b[31m"
 	ansiCyan       = "\x1b[36m"
 	ansiClearLine  = "\r\x1b[2K"
+	ansiCursorUp   = "\x1b[A"
 	ansiHideCursor = "\x1b[?25l"
 	ansiShowCursor = "\x1b[?25h"
 )

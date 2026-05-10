@@ -2,16 +2,18 @@
 // between two modes:
 //
 //   - TUI mode: a colourful single-line progress bar redrawn in place
-//     with ANSI escape codes. Suitable for interactive terminals.
+//     with ANSI escape codes; when a Step is active and a download
+//     starts, the spinner stays on its line and the bar paints on the
+//     line beneath it (a single render frame redraws both). Suitable
+//     for interactive terminals.
 //   - Log mode: timestamped, level-prefixed lines (one per event).
 //     Suitable for CI logs or piped output where carriage-return
 //     redraws look like garbage.
 //
 // The mode is chosen by the CLI in this priority order:
 //
-//  1. Explicit --log / --tui flag
-//  2. [output].mode in conch.toml ("tui", "log", or "auto")
-//  3. Auto-detect: TUI if stdout is a TTY, otherwise log.
+//  1. Explicit --min-ui flag (forces ModeLog).
+//  2. Auto-detect: TUI if stdout is a TTY, otherwise log.
 package ui
 
 import (
@@ -57,9 +59,18 @@ type UI struct {
 	now  func() time.Time
 
 	// activeStep, if non-nil, is the spinner currently animating the
-	// current line. Step starts one; Done / BeginDownload / line()
-	// stop it before printing their own output.
-	activeStep *spinningStep
+	// top line of the live frame.
+	//
+	// activeDownload, if non-nil, is the streaming download whose
+	// progress bar currently occupies the bottom line of the live
+	// frame.
+	//
+	// The four (nil, nil), (step, nil), (nil, dl), (step, dl)
+	// combinations all map cleanly through renderTUILocked — see its
+	// comment for the cursor protocol that holds the redraws in
+	// place.
+	activeStep     *spinningStep
+	activeDownload *Download
 }
 
 // newRenderer returns a UI rendering to the given streams. Constructor
@@ -90,9 +101,10 @@ func (u *UI) Mode() Mode { return u.mode }
 // Step announces a new in-progress operation.
 //
 //   - Log mode: prints one INFO-level line and returns.
-//   - TUI mode: starts a spinner on the current line. The spinner
-//     animates until Done finalises it (or until a download / warning
-//     / error preempts it).
+//   - TUI mode: starts a spinner on the top line of the live frame.
+//     If a download is already running, the spinner takes the line
+//     above the bar; otherwise it occupies the only line. The
+//     spinner animates until Done finalises it.
 func (u *UI) Step(format string, args ...any) {
 	msg := capitalise(fmt.Sprintf(format, args...))
 	if u.mode == ModeLog {
@@ -122,18 +134,37 @@ func (u *UI) Done(format string, args ...any) {
 	fmt.Fprintf(u.out, "%s✓%s %s\n", ansiGreen, ansiReset, msg)
 }
 
-// Warn prints a warning. Stops any in-progress spinner first so the
-// warning isn't immediately overwritten. Goes to stderr in log mode.
+// Warn prints a warning. Tears down any live frame first so the
+// warning isn't immediately overwritten by the next spinner tick.
+// Goes to stderr in log mode.
 func (u *UI) Warn(format string, args ...any) {
-	u.stopSpinner()
+	u.tearDownFrame()
 	u.line("warn", "! ", format, args...)
 }
 
-// Errorf prints an error. Stops any in-progress spinner first. Goes
-// to stderr in log mode.
+// Errorf prints an error. Tears down any live frame first. Goes to
+// stderr in log mode.
 func (u *UI) Errorf(format string, args ...any) {
-	u.stopSpinner()
+	u.tearDownFrame()
 	u.line("error", "✗ ", format, args...)
+}
+
+// tearDownFrame stops the spinner and detaches any in-progress
+// download so subsequent line() output isn't fighting either of them
+// for the cursor.
+func (u *UI) tearDownFrame() {
+	u.stopSpinner()
+	u.mu.Lock()
+	if u.activeDownload != nil {
+		// Clear the bar line and step the cursor up to where the
+		// spinner had been; line() then ansiClearLines that and
+		// writes its message there.
+		if u.mode == ModeTUI {
+			fmt.Fprint(u.out, ansiClearLine+ansiCursorUp)
+		}
+		u.activeDownload = nil
+	}
+	u.mu.Unlock()
 }
 
 func (u *UI) line(level, prefix, format string, args ...any) {
@@ -166,6 +197,40 @@ func (u *UI) line(level, prefix, format string, args ...any) {
 	fmt.Fprintf(dst, "%s %s %s\n", u.now().UTC().Format("2006-01-02T15:04:05Z"), levelLabel(level), msg)
 }
 
+// renderTUILocked redraws the live frame — spinner line, bar line,
+// or both — based on the current activeStep / activeDownload state.
+// Caller must hold u.mu.
+//
+// Cursor protocol the rest of the package depends on:
+//
+//   - Spinner-only frame: cursor ends at end of spinner line.
+//   - Bar-only frame: cursor ends at end of bar line.
+//   - Dual frame: cursor ends at end of bar line (the row below the
+//     spinner). The redraw walks up to the spinner line, repaints
+//     it, then walks back down and repaints the bar; \r\x1b[2K is
+//     issued for each row so partial frame residue from a previous
+//     wider message is wiped.
+func (u *UI) renderTUILocked() {
+	if u.mode != ModeTUI {
+		return
+	}
+	switch {
+	case u.activeStep != nil && u.activeDownload != nil:
+		fmt.Fprint(u.out,
+			ansiClearLine+ // clear bar line (cursor enters here)
+				ansiCursorUp+ansiClearLine+ // step up to spinner line, clear it
+				renderSpinFrame(u.activeStep.frame, u.activeStep.msg)+
+				"\n"+ansiClearLine+ // advance to bar line, ensure clean
+				u.activeDownload.renderBar())
+	case u.activeStep != nil:
+		fmt.Fprint(u.out,
+			ansiClearLine+renderSpinFrame(u.activeStep.frame, u.activeStep.msg))
+	case u.activeDownload != nil:
+		fmt.Fprint(u.out,
+			ansiClearLine+u.activeDownload.renderBar())
+	}
+}
+
 // capitalise upper-cases the first rune of s, leaving the rest
 // untouched. Used so callers can keep Go-idiomatic lowercase format
 // strings while output presents capitalised messages.
@@ -184,11 +249,12 @@ func capitalise(s string) string {
 // total size isn't known (no Content-Length header) — the bar
 // degrades to a spinner-style "X.YMB" counter.
 //
-// Calling BeginDownload halts any in-progress Step spinner: the bar
-// will redraw on the same line as the spinner had occupied, so the
-// transition is seamless.
+// If a Step is currently running its spinner, the bar takes the row
+// below it: BeginDownload writes a newline to advance the cursor to
+// the bar's row, and from there the spinner ticker and the bar's
+// Write both redraw a coherent two-row frame via renderTUILocked.
+// Without a Step, the bar takes over the current line as before.
 func (u *UI) BeginDownload(name string, total int64) *Download {
-	u.stopSpinner()
 	d := &Download{
 		ui:      u,
 		name:    name,
@@ -197,7 +263,18 @@ func (u *UI) BeginDownload(name string, total int64) *Download {
 	}
 	if u.mode == ModeLog {
 		u.line("info", "", "downloading %s (%s)", name, fmtBytes(total))
+		return d
 	}
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.activeDownload = d
+	if u.activeStep != nil {
+		// Open a fresh row beneath the spinner — the dual-frame
+		// renderTUILocked expects the cursor on the bar row.
+		fmt.Fprint(u.out, "\n")
+	}
+	u.renderTUILocked()
 	return d
 }
 

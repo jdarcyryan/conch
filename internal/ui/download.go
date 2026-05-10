@@ -39,10 +39,11 @@ func (d *Download) Write(p []byte) (int, error) {
 
 // Done finalises the download.
 //
-// TUI mode: the bar is cleared and nothing replaces it. The
-// surrounding Step ("Installing PowerShell into ...") already told
-// the user what was running; once the download is done that line
-// disappears entirely so the next Step starts on a clean row.
+// TUI mode: the bar row is cleared and the cursor returned to the
+// spinner row above (when a Step is active), so the surrounding Step
+// continues animating uninterrupted on the original line. When no
+// Step is active, the bar's row is just cleared and the cursor stays
+// there.
 //
 // Log mode: a one-line summary with elapsed time and average speed,
 // because there's no animated bar to clear and the line is the only
@@ -58,7 +59,17 @@ func (d *Download) Done() {
 	switch d.ui.mode {
 	case ModeTUI:
 		d.ui.mu.Lock()
-		fmt.Fprint(d.ui.out, ansiClearLine)
+		hasSpinner := d.ui.activeStep != nil
+		// Detach first so renderTUILocked-driven spinner ticks stop
+		// trying to repaint a bar that's gone.
+		d.ui.activeDownload = nil
+		if hasSpinner {
+			// Wipe the bar row, walk the cursor up to the spinner
+			// row. The next spinner tick will repaint there.
+			fmt.Fprint(d.ui.out, ansiClearLine+ansiCursorUp)
+		} else {
+			fmt.Fprint(d.ui.out, ansiClearLine)
+		}
 		d.ui.mu.Unlock()
 	case ModeLog:
 		elapsed := d.ui.now().Sub(d.started)
@@ -81,8 +92,9 @@ func (d *Download) Fail(err error) {
 	d.ui.Errorf("download %s failed: %v", d.name, err)
 }
 
-// maybeDrawLocked redraws the TUI bar at most ~10 Hz. The caller must
-// hold d.mu.
+// maybeDrawLocked schedules a TUI repaint at most ~10 Hz. The caller
+// must hold d.mu. Drawing itself is delegated to renderTUILocked so
+// when a spinner is also active the two rows stay in lock-step.
 func (d *Download) maybeDrawLocked() {
 	if d.ui.mode != ModeTUI {
 		return
@@ -95,7 +107,7 @@ func (d *Download) maybeDrawLocked() {
 
 	d.ui.mu.Lock()
 	defer d.ui.mu.Unlock()
-	fmt.Fprint(d.ui.out, ansiClearLine+d.renderBar())
+	d.ui.renderTUILocked()
 }
 
 // renderBar formats one frame of the progress bar.

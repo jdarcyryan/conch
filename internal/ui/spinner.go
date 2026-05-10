@@ -14,11 +14,16 @@ const spinFrameInterval = 80 * time.Millisecond
 
 // spinningStep is one in-flight Step. The goroutine that animates it
 // listens on stop and signals done when it has exited so finalisers
-// can wait for it cleanly.
+// can wait for it cleanly. frame is the index of the spinner glyph
+// most recently committed; it lives on the step (rather than as a
+// goroutine local) so renderTUILocked — which can be called from
+// either the spinner ticker or a download Write — sees the same
+// frame for the same redraw.
 type spinningStep struct {
-	msg  string
-	stop chan struct{}
-	done chan struct{}
+	msg   string
+	frame int
+	stop  chan struct{}
+	done  chan struct{}
 }
 
 // startSpinner starts a goroutine that overwrites the current line
@@ -43,17 +48,20 @@ func (u *UI) startSpinner(msg string) {
 	}
 	u.activeStep = s
 
-	fmt.Fprint(u.out, renderSpinFrame(0, msg))
+	// Initial paint goes through renderTUILocked so the dual-mode
+	// case (Step called while a download is in flight) draws a
+	// coherent frame from the start.
+	u.renderTUILocked()
 	go u.spin(s)
 }
 
-// renderSpinFrame composes one full spinner-line redraw into a single
-// string so it can be flushed to the terminal in one Write call. Two
-// separate writes (clear, then content) produce a visible blank-line
-// state between them which the eye perceives as flicker. One write
-// keeps the redraw atomic from the terminal's point of view.
+// renderSpinFrame returns the visible content of one spinner row —
+// coloured glyph followed by the message. Cursor positioning and
+// line clearing are the caller's responsibility (renderTUILocked
+// emits ansiClearLine right before this is interpolated into the
+// frame string), keeping the whole frame a single Write.
 func renderSpinFrame(frame int, msg string) string {
-	return ansiClearLine + conchColour + spinFrames[frame] + ansiReset + " " + msg
+	return conchColour + spinFrames[frame] + ansiReset + " " + msg
 }
 
 // stopSpinner halts any in-progress spinner without writing a final
@@ -82,8 +90,9 @@ func (u *UI) stopSpinnerLocked() {
 
 // spin animates the spinner until stop is closed. Holds u.mu only for
 // the duration of each frame write so the foreground caller can
-// preempt cleanly. Each frame is one Write so the terminal never
-// renders a half-cleared line.
+// preempt cleanly. Frame composition is delegated to
+// renderTUILocked so dual-mode redraws (spinner + download bar) stay
+// in lock-step with bar updates triggered from Download.Write.
 func (u *UI) spin(s *spinningStep) {
 	defer close(s.done)
 
@@ -98,9 +107,9 @@ func (u *UI) spin(s *spinningStep) {
 		case <-s.stop:
 			return
 		case <-ticker.C:
-			frame := renderSpinFrame(i, s.msg)
 			u.mu.Lock()
-			fmt.Fprint(u.out, frame)
+			s.frame = i
+			u.renderTUILocked()
 			u.mu.Unlock()
 			i = (i + 1) % len(spinFrames)
 		}
