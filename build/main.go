@@ -48,7 +48,28 @@ func main() {
 	step("Copying native binary to root")
 	copyNativeBinary()
 
+	step("Scaffolding example projects under .output/tests")
+	scaffoldExampleProjects()
+
 	step("Done")
+}
+
+// scaffoldExampleProjects materialises one project directory per
+// example manifest under .output/tests/<basename>/conch.toml. This
+// gives us throwaway sandboxes to drive the freshly-built binary
+// against — `cd .output/tests/04-tasks && conch install` runs the
+// example without touching the source tree.
+func scaffoldExampleProjects() {
+	matches, err := filepath.Glob("examples/*.toml")
+	must(err)
+
+	for _, src := range matches {
+		base := strings.TrimSuffix(filepath.Base(src), ".toml")
+		dest := filepath.Join(".output/tests", base, "conch.toml")
+		log.Printf("seeding %s → %s", src, dest)
+		must(os.MkdirAll(filepath.Dir(dest), 0o755))
+		must(copyFile(src, dest))
+	}
 }
 
 // sortOutput reorganises goreleaser's flat .output/ tree into
