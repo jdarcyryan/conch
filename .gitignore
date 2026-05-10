@@ -4,6 +4,15 @@
 # Claude settings
 .claude/
 
+# Ad-hoc build artifacts
+*.nupkg
+*.rpm
+*.deb
+*.apk
+*.exe
+conch
+!conch/
+
 # Build
 .output
 *.syso
