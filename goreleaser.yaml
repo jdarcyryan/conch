@@ -12,12 +12,12 @@ before:
 
 # Manually incremented versioning
 snapshot:
-  version_template: 0.1.0
+  version_template: 1.0.0
 
 # Build
 # Compiles the Go binary for each OS/arch combination.
 builds:
-  - main: .
+  - main: ./cmd/conch
     env:
       - CGO_ENABLED=0
     goos:
