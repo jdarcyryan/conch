@@ -47,8 +47,4 @@ Once the artefacts are in place, `activate.ps1` is regenerated from the manifest
 `[tasks]` takes effect on the next `conch run` without a re-install. The script anchors itself on `$PSScriptRoot` so the whole project directory is portable, isolates `PSModulePath` to
 `.conch/modules` plus the bundled engine modules (without which basic cmdlets like `Add-Member` would be unreachable), and tidies up its scratch variables on exit.
 
-<div align="center">
-
 ![conch](assets/conch-workflow.png)
-
-</div>
