@@ -4,6 +4,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -59,6 +63,9 @@ func main() {
 
 	step("Copying install.sh into release outputs")
 	copyInstaller()
+
+	step("Adding install.sh and .nupkg entries to checksums.txt")
+	extendChecksums()
 
 	step("Scaffolding example projects under .output/examples")
 	scaffoldProjects("examples/*.toml", ".output/examples")
@@ -174,6 +181,62 @@ func goreleaserSnapshotVersion() string {
 		log.Fatal("could not find snapshot.version_template in goreleaser.yaml")
 	}
 	return m[1]
+}
+
+// extendChecksums folds install.sh and any .nupkg files into the
+// goreleaser-produced checksums.txt. Goreleaser only checksums the
+// artifacts it knows about, and it neither tracks the chocolatey
+// .nupkg (sourced via glob in sortOutput) nor install.sh (rendered
+// after goreleaser exits), so we hash them ourselves and merge the
+// rows back in, alphabetised to match goreleaser's own ordering.
+func extendChecksums() {
+	csPath := ".output/release/checksums.txt"
+	data, err := os.ReadFile(csPath)
+	must(err)
+
+	entries := map[string]string{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		entries[fields[1]] = fields[0]
+	}
+
+	extras, _ := filepath.Glob(".output/release/*.nupkg")
+	extras = append(extras, ".output/release/install.sh")
+	for _, p := range extras {
+		sum, err := sha256File(p)
+		must(err)
+		name := filepath.Base(p)
+		entries[name] = sum
+		log.Printf("checksummed %s", name)
+	}
+
+	names := make([]string, 0, len(entries))
+	for n := range entries {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	var buf bytes.Buffer
+	for _, n := range names {
+		fmt.Fprintf(&buf, "%s  %s\n", entries[n], n)
+	}
+	must(os.WriteFile(csPath, buf.Bytes(), 0o644))
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // nativeTargetDir returns the goreleaser-style folder name for the
