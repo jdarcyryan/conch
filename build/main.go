@@ -48,24 +48,28 @@ func main() {
 	step("Copying native binary to root")
 	copyNativeBinary()
 
-	step("Scaffolding example projects under .output/tests")
-	scaffoldExampleProjects()
+	step("Scaffolding example projects under .output/examples")
+	scaffoldProjects("examples/*.toml", ".output/examples")
+
+	step("Scaffolding CI test fixtures under .output/tests")
+	scaffoldProjects("tests/*.toml", ".output/tests")
 
 	step("Done")
 }
 
-// scaffoldExampleProjects materialises one project directory per
-// example manifest under .output/tests/<basename>/conch.toml. This
-// gives us throwaway sandboxes to drive the freshly-built binary
-// against — `cd .output/tests/04-tasks && conch install` runs the
-// example without touching the source tree.
-func scaffoldExampleProjects() {
-	matches, err := filepath.Glob("examples/*.toml")
+// scaffoldProjects materialises one project directory per source
+// manifest under destBase/<basename>/conch.toml. This gives us
+// throwaway sandboxes to drive the freshly-built binary against —
+// `cd .output/examples/04-tasks && conch install` runs the example
+// without touching the source tree. The same shape is used for CI
+// fixtures from `tests/`, which CI iterates over per platform.
+func scaffoldProjects(srcGlob, destBase string) {
+	matches, err := filepath.Glob(srcGlob)
 	must(err)
 
 	for _, src := range matches {
 		base := strings.TrimSuffix(filepath.Base(src), ".toml")
-		dest := filepath.Join(".output/tests", base, "conch.toml")
+		dest := filepath.Join(destBase, base, "conch.toml")
 		log.Printf("seeding %s → %s", src, dest)
 		must(os.MkdirAll(filepath.Dir(dest), 0o755))
 		must(copyFile(src, dest))
