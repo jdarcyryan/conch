@@ -11,6 +11,12 @@ on:
       - 'tests/**'
       - '.github/workflows/**'
 
+# Opt the runner into Node.js 24 ahead of the June 2026 default
+# flip-over. Anything pinned to Node 20 (e.g. older third-party
+# actions) is upgraded for the workflow without per-job overrides.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Single gating workflow. One Build and Test job runs static checks,
 # unit tests, and the goreleaser snapshot up front; the per-platform
 # Environment and Package jobs gate on it via needs:. `needs:` is the
@@ -94,15 +100,23 @@ jobs:
       - name: Exercise summary, tasks, and run across formats and UI modes
         working-directory: ${{ runner.temp }}/agnostic
         run: |
-          set -euxo pipefail
-          conch summary
-          conch tasks
-          for fmt in json yaml toml xml; do
-            conch summary --format "$fmt"
-            conch tasks --format "$fmt"
-          done
-          conch run hello --min-ui
-          conch run psversion
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
 
   env_linux_arm64:
     name: Environment tests (linux-arm64)
@@ -147,15 +161,23 @@ jobs:
       - name: Exercise summary, tasks, and run across formats and UI modes
         working-directory: ${{ runner.temp }}/agnostic
         run: |
-          set -euxo pipefail
-          conch summary
-          conch tasks
-          for fmt in json yaml toml xml; do
-            conch summary --format "$fmt"
-            conch tasks --format "$fmt"
-          done
-          conch run hello --min-ui
-          conch run psversion
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
 
   env_windows_amd64:
     name: Environment tests (windows-amd64)
@@ -209,14 +231,26 @@ jobs:
         working-directory: ${{ runner.temp }}/agnostic
         shell: pwsh
         run: |
-          conch summary
-          conch tasks
-          foreach ($fmt in @('json', 'yaml', 'toml', 'xml')) {
-              conch summary --format $fmt
-              conch tasks --format $fmt
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
           }
-          conch run hello --min-ui
-          conch run psversion
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
 
   env_windows_arm64:
     name: Environment tests (windows-arm64)
@@ -270,14 +304,26 @@ jobs:
         working-directory: ${{ runner.temp }}/agnostic
         shell: pwsh
         run: |
-          conch summary
-          conch tasks
-          foreach ($fmt in @('json', 'yaml', 'toml', 'xml')) {
-              conch summary --format $fmt
-              conch tasks --format $fmt
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
           }
-          conch run hello --min-ui
-          conch run psversion
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
 
   pkg_linux_amd64:
     name: Package tests (linux-amd64)
