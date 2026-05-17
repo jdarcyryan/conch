@@ -71,6 +71,19 @@ jobs:
         working-directory: ${{ runner.temp }}/agnostic
         run: conch install --min-ui
 
+      - name: Check that conch added .conch/ to .gitignore
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) {
+              throw ".gitignore was not created"
+          }
+
+          $lines = Get-Content -Path .gitignore
+          if ($lines -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
       - name: Install Windows arm64 environment
         working-directory: ${{ runner.temp }}/windows-arm64
         run: conch install --min-ui

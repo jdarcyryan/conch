@@ -57,6 +57,13 @@ jobs:
         working-directory: ${{ runner.temp }}/agnostic
         run: conch install --min-ui
 
+      - name: Check that conch added .conch/ to .gitignore
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euxo pipefail
+          test -f .gitignore
+          grep -Fxq '.conch/' .gitignore
+
       - name: Install Linux arm64 environment
         working-directory: ${{ runner.temp }}/linux-arm64
         run: conch install --min-ui
