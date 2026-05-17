@@ -37,7 +37,15 @@ func main() {
 	run("go-winres", "make", "--in", "winres/winres.json")
 
 	step("Running goreleaser")
-	run("goreleaser", "release", "--snapshot", "--clean")
+	// chocolatey's packager shells out to `choco`, which is Windows-only
+	// (it needs mono on Linux and isn't worth the dependency in CI).
+	// Skip it everywhere except a Windows host, where local devs still
+	// get the .nupkg.
+	gargs := []string{"release", "--snapshot", "--clean"}
+	if runtime.GOOS != "windows" {
+		gargs = append(gargs, "--skip=chocolatey")
+	}
+	run("goreleaser", gargs...)
 
 	step("Cleaning up .syso files")
 	cleanSyso()
