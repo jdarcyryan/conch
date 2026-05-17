@@ -233,7 +233,12 @@ func extractTarGz(archive, dest string) error {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return err
 			}
-			out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)|0o600)
+			// PowerShell ships pwsh with the execute bit set in the tar
+			// header; preserve those bits and force-add owner rwx so the
+			// binary is runnable. OpenFile's perm is subject to the
+			// process umask, so re-apply the mode with Chmod afterwards.
+			mode := os.FileMode(hdr.Mode).Perm() | 0o700
+			out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
 				return err
 			}
@@ -241,7 +246,12 @@ func extractTarGz(archive, dest string) error {
 				out.Close()
 				return err
 			}
-			out.Close()
+			if err := out.Close(); err != nil {
+				return err
+			}
+			if err := os.Chmod(path, mode); err != nil {
+				return err
+			}
 		case tar.TypeSymlink:
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return err
