@@ -21,25 +21,54 @@ else
     exit 1
 fi
 
+if [ ! -r /etc/os-release ]; then
+    echo "install.sh: /etc/os-release missing or unreadable" >&2
+    exit 1
+fi
 . /etc/os-release
 FAMILY=" ${ID:-} ${ID_LIKE:-} "
 
-SUDO=""
-[ "$(id -u)" -eq 0 ] || SUDO=sudo
-
+# Pick the package extension up front so the download / install lines
+# can stay generic. dpkg, rpm, and apk are the lowest-common-denominator
+# tools — installed by default on every member of each family — so the
+# script does not depend on apt/dnf/yum being present.
 if echo "$FAMILY" | grep -qE '(debian|ubuntu)'; then
-    PKG="conch_${VERSION}_${ARCH}.deb"
-    curl -fsSL "${BASE}/${PKG}" -o "/tmp/${PKG}"
-    $SUDO dpkg -i "/tmp/${PKG}"
+    EXT=deb
 elif echo "$FAMILY" | grep -qE '(fedora|rhel|centos)'; then
-    PKG="conch_${VERSION}_${ARCH}.rpm"
-    curl -fsSL "${BASE}/${PKG}" -o "/tmp/${PKG}"
-    $SUDO dnf install -y "/tmp/${PKG}"
+    EXT=rpm
 elif echo "$FAMILY" | grep -q 'alpine'; then
-    PKG="conch_${VERSION}_${ARCH}.apk"
-    curl -fsSL "${BASE}/${PKG}" -o "/tmp/${PKG}"
-    $SUDO apk add --allow-untrusted "/tmp/${PKG}"
+    EXT=apk
 else
     echo "install.sh: unsupported distro ${ID:-unknown}" >&2
     exit 1
 fi
+
+SUDO=""
+[ "$(id -u)" -eq 0 ] || SUDO=sudo
+
+# Stage the package in a private temp dir and register cleanup against
+# every termination path — normal exit, error under `set -e`, or one of
+# the common signals. The trap fires before the script process leaves,
+# so the downloaded package never lingers on disk even if dpkg/rpm/apk
+# rejects it.
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
+
+PKG="conch_${VERSION}_${ARCH}.${EXT}"
+PKG_PATH="${TMP_DIR}/${PKG}"
+URL="${BASE}/${PKG}"
+
+if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$URL" -o "$PKG_PATH"
+elif command -v wget >/dev/null 2>&1; then
+    wget -q "$URL" -O "$PKG_PATH"
+else
+    echo "install.sh: neither curl nor wget is installed" >&2
+    exit 1
+fi
+
+case "$EXT" in
+    deb) $SUDO dpkg -i "$PKG_PATH" ;;
+    rpm) $SUDO rpm -i "$PKG_PATH" ;;
+    apk) $SUDO apk add --allow-untrusted "$PKG_PATH" ;;
+esac
