@@ -1,20 +1,16 @@
 name: Test Linux amd64
 
 on:
-  pull_request:
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'goreleaser.yaml'
-      - 'winres/**'
-      - 'tests/**'
-      - '.github/workflows/**'
+  workflow_run:
+    workflows: [Test]
+    types:
+      - completed
 
-# Linux amd64 coverage. The richest of the per-platform workflows
-# because it hosts the .deb/.rpm/.apk install checks and the
-# command-coverage suite (summary, tasks, run in every format and UI
-# mode). Two jobs in parallel:
+# Linux amd64 coverage. Gated on the Test workflow completing
+# successfully — the jobs below short-circuit otherwise. The richest
+# of the per-platform workflows because it hosts the .deb/.rpm/.apk
+# install checks and the command-coverage suite (summary, tasks, run
+# in every format and UI mode). Two jobs in parallel:
 #
 #   - binary_and_commands: builds the native binary with `go build`,
 #     drives the install fixtures, then exercises every other CLI
@@ -26,9 +22,12 @@ on:
 jobs:
   binary_and_commands:
     name: Binary install and command coverage on Linux amd64
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -129,9 +128,12 @@ jobs:
 
   package_install:
     name: Package install on Linux amd64
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
