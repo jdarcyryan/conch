@@ -10,6 +10,7 @@ on:
       - 'winres/**'
       - 'tests/**'
       - '.github/workflows/**'
+  workflow_dispatch:
 
 # Opt the runner into Node.js 24 ahead of the June 2026 default
 # flip-over. Anything pinned to Node 20 (e.g. older third-party
