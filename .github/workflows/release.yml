@@ -530,7 +530,7 @@ jobs:
 
           gh release create "$VERSION" \
             .output/release/* \
-            --title "conch $VERSION" \
+            --title "$VERSION" \
             --notes "$notes" \
             --generate-notes
 
