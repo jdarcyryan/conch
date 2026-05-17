@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -55,6 +56,9 @@ func main() {
 
 	step("Copying native binary to root")
 	copyNativeBinary()
+
+	step("Copying install.sh into release outputs")
+	copyInstaller()
 
 	step("Scaffolding example projects under .output/examples")
 	scaffoldProjects("examples/*.toml", ".output/examples")
@@ -136,6 +140,40 @@ func copyNativeBinary() {
 
 	log.Printf("copying %s → %s", src, dest)
 	must(copyFile(src, dest))
+}
+
+// copyInstaller renders build/install.sh into
+// .output/release/install.sh with the goreleaser snapshot version
+// baked in. Each release ships a version-pinned script next to its
+// packages, so users get a stable URL per release and no GitHub API
+// dependency at install time.
+func copyInstaller() {
+	version := goreleaserSnapshotVersion()
+	tmpl, err := os.ReadFile("build/install.sh")
+	must(err)
+
+	rendered := strings.ReplaceAll(string(tmpl), "__CONCH_VERSION__", version)
+	dest := ".output/release/install.sh"
+
+	log.Printf("rendering build/install.sh (version=%s) → %s", version, dest)
+	must(os.MkdirAll(filepath.Dir(dest), 0o755))
+	must(os.WriteFile(dest, []byte(rendered), 0o755))
+}
+
+// goreleaserSnapshotVersion lifts the snapshot.version_template value
+// out of goreleaser.yaml. Until conch cuts real tags, this is the
+// version stamped into produced packages and therefore the version
+// install.sh needs to download.
+var versionTemplateRE = regexp.MustCompile(`(?m)^\s*version_template:\s*(\S+)\s*$`)
+
+func goreleaserSnapshotVersion() string {
+	data, err := os.ReadFile("goreleaser.yaml")
+	must(err)
+	m := versionTemplateRE.FindStringSubmatch(string(data))
+	if len(m) < 2 {
+		log.Fatal("could not find snapshot.version_template in goreleaser.yaml")
+	}
+	return m[1]
 }
 
 // nativeTargetDir returns the goreleaser-style folder name for the
