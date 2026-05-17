@@ -15,22 +15,20 @@ permissions:
   contents: write
   packages: write
 
-# Release pipeline. Same shape as integration.yml — version check and
-# build first, then per-platform environment + package tests, then the
-# release publish step. Differences from integration.yml:
+# Release pipeline. Mirrors integration.yml — same per-platform
+# Environment and Package tests against the same goreleaser snapshot —
+# and adds the bits unique to a publish:
 #
-#   * Triggered only by workflow_dispatch, refuses any non-default
-#     branch so the release ref comes from the branch protected in
-#     repo settings.
-#   * Adds check_version, which reads goreleaser.yaml's snapshot
-#     version_template and fails if a release for that tag already
-#     exists on GitHub.
-#   * build_and_test runs on windows-latest so the goreleaser run
-#     produces the chocolatey .nupkg (choco-pack is Windows-only);
-#     every other job stays on its native runner.
-#   * Final release job downloads the full .output/release/ artifact,
-#     creates the GitHub release with install instructions, and
-#     pushes the .nupkg to GitHub Packages via the dotnet CLI.
+#   * check_version refuses any branch other than the repo's
+#     configured default and fails if the resolved version already
+#     exists as either a GitHub release tag or a NuGet package
+#     version on GitHub Packages.
+#   * publish at the tail downloads the snapshot built by
+#     build_and_test and ships everything under .output/release/ as
+#     a tagged GitHub release with install instructions on top of
+#     GitHub's auto-generated changelog. Any .nupkg present in the
+#     snapshot is pushed to GitHub Packages via dotnet nuget; the
+#     step short-circuits cleanly when goreleaser produced none.
 
 jobs:
   check_version:
@@ -103,7 +101,7 @@ jobs:
   build_and_test:
     name: Build and Test
     needs: check_version
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -119,7 +117,6 @@ jobs:
           install-only: true
 
       - name: Run static checks, unit tests, and goreleaser snapshot
-        shell: bash
         run: |
           set -euxo pipefail
           go run ./build/test
@@ -543,9 +540,15 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euxo pipefail
+          pushed=0
           for nupkg in .output/release/*.nupkg; do
+            [ -f "$nupkg" ] || continue
             dotnet nuget push "$nupkg" \
               --source "https://nuget.pkg.github.com/${OWNER}/index.json" \
               --api-key "$GH_TOKEN" \
               --skip-duplicate
+            pushed=$((pushed + 1))
           done
+          if [ "$pushed" -eq 0 ]; then
+            echo "No .nupkg in release artifacts — nothing to push to GitHub Packages."
+          fi
