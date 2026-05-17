@@ -1,0 +1,76 @@
+name: Test Windows arm64
+
+on:
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'goreleaser.yaml'
+      - 'winres/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+
+# Windows arm64 coverage. Native build on windows-11-arm — no
+# choco package install (per project policy, the binary is copied
+# straight from the build output). Drives `conch install --min-ui`
+# against the platform-agnostic fixture and the arm64-locked fixture.
+
+jobs:
+  binary_install:
+    name: Binary install on Windows arm64
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Show platform banner
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          Write-Host -Object "$esc[1;33m========================================"
+          Write-Host -Object "  Binary install on Windows arm64"
+          Write-Host -Object "========================================$esc[0m"
+
+      - name: Build conch for Windows arm64
+        shell: pwsh
+        run: go build -o conch.exe ./cmd/conch
+
+      - name: Install conch onto PATH
+        shell: pwsh
+        run: |
+          $bin = Join-Path -Path $env:USERPROFILE -ChildPath ".conch-bin"
+          $conchExe = Join-Path -Path $bin -ChildPath "conch.exe"
+
+          New-Item -Path $bin -ItemType Directory -Force > $null
+          Copy-Item -Path "conch.exe" -Destination $conchExe -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+          $env:PATH = "$bin;$env:PATH"
+          Get-Command -Name conch | Format-List -Property Name, Source
+          conch --version
+
+      - name: Scaffold test fixtures into RUNNER_TEMP
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $name = $f.BaseName
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $name
+              $conchToml = Join-Path -Path $dest -ChildPath "conch.toml"
+
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination $conchToml -Force
+          }
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Install Windows arm64 environment
+        working-directory: ${{ runner.temp }}/windows-arm64
+        run: conch install --min-ui
