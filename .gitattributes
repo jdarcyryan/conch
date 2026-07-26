@@ -1,0 +1,9 @@
+# Shell scripts ship inside release assets and run on Linux — a CRLF
+# checkout (e.g. Windows runners set core.autocrlf=true) bakes CRs into
+# install.sh, and a CR inside the download URL breaks curl with
+# "URL using bad/illegal format or missing URL".
+*.sh text eol=lf
+
+# gofmt rewrites CRLF to LF, so `gofmt -l` flags every file on a CRLF
+# checkout and the static-check stage fails on Windows runners.
+*.go text eol=lf
