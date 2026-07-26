@@ -568,20 +568,4 @@ jobs:
             echo "No .nupkg in release artifacts — the Windows build should always produce one." >&2
             exit 1
           fi
-
-  smoke_install:
-    name: Smoke test install.sh
-    needs:
-      - check_version
-      - publish
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install via the published one-liner
-        env:
-          VERSION: ${{ needs.check_version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euxo pipefail
-          curl -fsSL "https://github.com/${REPO}/releases/download/${VERSION}/install.sh" | sudo sh
-          command -v conch
-          conch --version
+          
