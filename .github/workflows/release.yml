@@ -23,12 +23,19 @@ permissions:
 #     configured default and fails if the resolved version already
 #     exists as either a GitHub release tag or a NuGet package
 #     version on GitHub Packages.
+#   * build_and_test runs on windows-latest — the only runner with
+#     choco on PATH, which goreleaser's chocolatey packager shells
+#     out to — so the snapshot includes the .nupkg alongside the
+#     Linux packages (nfpm and the archivers are pure Go and build
+#     those fine from Windows). .gitattributes pins *.go/*.sh to LF
+#     so the runner's core.autocrlf=true can't break gofmt or bake
+#     CRs into install.sh.
 #   * publish at the tail downloads the snapshot built by
 #     build_and_test and ships everything under .output/release/ as
 #     a tagged GitHub release with install instructions on top of
-#     GitHub's auto-generated changelog. Any .nupkg present in the
-#     snapshot is pushed to GitHub Packages via dotnet nuget; the
-#     step short-circuits cleanly when goreleaser produced none.
+#     GitHub's auto-generated changelog. The .nupkg is pushed to
+#     GitHub Packages via dotnet nuget; a snapshot without one fails
+#     the job rather than silently shipping an incomplete release.
 
 jobs:
   check_version:
@@ -100,8 +107,11 @@ jobs:
 
   build_and_test:
     name: Build and Test
+    # windows-latest so the goreleaser chocolatey packager finds choco
+    # and the snapshot includes the .nupkg. build/main.go only skips
+    # chocolatey on non-Windows hosts.
     needs: check_version
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -117,6 +127,7 @@ jobs:
           install-only: true
 
       - name: Run static checks, unit tests, and goreleaser snapshot
+        shell: bash
         run: |
           set -euxo pipefail
           go run ./build/test
@@ -550,5 +561,6 @@ jobs:
             pushed=$((pushed + 1))
           done
           if [ "$pushed" -eq 0 ]; then
-            echo "No .nupkg in release artifacts — nothing to push to GitHub Packages."
+            echo "No .nupkg in release artifacts — the Windows build should always produce one." >&2
+            exit 1
           fi
