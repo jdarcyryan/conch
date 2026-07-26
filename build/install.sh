@@ -25,8 +25,14 @@ if [ ! -r /etc/os-release ]; then
     echo "install.sh: /etc/os-release missing or unreadable" >&2
     exit 1
 fi
-. /etc/os-release
-FAMILY=" ${ID:-} ${ID_LIKE:-} "
+# Source os-release in a subshell only: the file defines VERSION (and
+# other generic names) itself, and sourcing it inline clobbers the
+# release version splatted in above — turning the download URL into
+# e.g. .../conch_22.04.3 LTS (Jammy Jellyfish)_amd64.deb, which curl
+# rejects as a bad/illegal format.
+OS_ID=$(. /etc/os-release && printf '%s' "${ID:-}")
+OS_ID_LIKE=$(. /etc/os-release && printf '%s' "${ID_LIKE:-}")
+FAMILY=" ${OS_ID} ${OS_ID_LIKE} "
 
 # Pick the package extension up front so the download / install lines
 # can stay generic. dpkg, rpm, and apk are the lowest-common-denominator
@@ -39,7 +45,7 @@ elif echo "$FAMILY" | grep -qE '(fedora|rhel|centos)'; then
 elif echo "$FAMILY" | grep -q 'alpine'; then
     EXT=apk
 else
-    echo "install.sh: unsupported distro ${ID:-unknown}" >&2
+    echo "install.sh: unsupported distro ${OS_ID:-unknown}" >&2
     exit 1
 fi
 
