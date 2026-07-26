@@ -159,7 +159,12 @@ func copyInstaller() {
 	tmpl, err := os.ReadFile("build/install.sh")
 	must(err)
 
-	rendered := strings.ReplaceAll(string(tmpl), "__CONCH_VERSION__", version)
+	// Normalise to LF regardless of how git checked the template out
+	// (core.autocrlf on Windows yields CRLF) — a CR baked into the URL
+	// line makes curl on the target machine fail with "URL using
+	// bad/illegal format or missing URL".
+	rendered := strings.ReplaceAll(string(tmpl), "\r\n", "\n")
+	rendered = strings.ReplaceAll(rendered, "__CONCH_VERSION__", version)
 	dest := ".output/release/install.sh"
 
 	log.Printf("rendering build/install.sh (version=%s) → %s", version, dest)
