@@ -12,12 +12,6 @@ on:
       - '.github/workflows/**'
   workflow_dispatch:
 
-# Opt the runner into Node.js 24 ahead of the June 2026 default
-# flip-over. Anything pinned to Node 20 (e.g. older third-party
-# actions) is upgraded for the workflow without per-job overrides.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 # Single gating workflow. One Build and Test job runs static checks,
 # unit tests, and the goreleaser snapshot up front; the per-platform
 # Environment and Package jobs gate on it via needs:. `needs:` is the
@@ -28,7 +22,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -63,7 +57,7 @@ jobs:
     needs: build_and_test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -124,7 +118,7 @@ jobs:
     needs: build_and_test
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -185,7 +179,7 @@ jobs:
     needs: build_and_test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -258,7 +252,7 @@ jobs:
     needs: build_and_test
     runs-on: windows-11-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5

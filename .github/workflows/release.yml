@@ -3,12 +3,6 @@ name: Release
 on:
   workflow_dispatch:
 
-# Opt the runner into Node.js 24 ahead of the June 2026 default
-# flip-over. Anything pinned to Node 20 (e.g. older third-party
-# actions) is upgraded for the workflow without per-job overrides.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 # Tokens minted for this workflow need write access to the release
 # (gh release create) and to GitHub Packages (dotnet nuget push).
 permissions:
@@ -48,7 +42,7 @@ jobs:
     outputs:
       version: ${{ steps.compute.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Refuse non-default branch
         env:
@@ -117,7 +111,7 @@ jobs:
     needs: check_version
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -150,7 +144,7 @@ jobs:
     needs: build_and_test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -211,7 +205,7 @@ jobs:
     needs: build_and_test
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -272,7 +266,7 @@ jobs:
     needs: build_and_test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -345,7 +339,7 @@ jobs:
     needs: build_and_test
     runs-on: windows-11-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -502,7 +496,7 @@ jobs:
       - pkg_linux_arm64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download release artifacts
         uses: actions/download-artifact@v4
