@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 # Tokens minted for this workflow need write access to the release
 # (gh release create) and to GitHub Packages (dotnet nuget push).
