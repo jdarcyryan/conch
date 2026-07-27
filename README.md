@@ -26,6 +26,10 @@
 
 </div>
 
+## Documentation
+- [Installation](docs/Installation.md) — install conch on Linux or Windows.
+- [Usage](docs/Usage.md) — commands, manifest examples, and environment variable overrides.
+
 ## Mission
 Conch is a declarative, cross-platform PowerShell environment manager. Describe your PowerShell version and modules in a single TOML manifest, run one command, and get a reproducible, isolated environment — pixi-style ergonomics, purpose-built for PowerShell.
 
