@@ -1,0 +1,397 @@
+name: Integration
+
+on:
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'goreleaser.yaml'
+      - 'winres/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+# Single gating workflow. One Build and Test job runs static checks,
+# unit tests, and the goreleaser snapshot up front; the per-platform
+# Environment and Package jobs gate on it via needs:. `needs:` is the
+# right tool here — workflow_run chaining was unreliable on PRs.
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+
+      - name: Run static checks, unit tests, and goreleaser snapshot
+        run: |
+          set -euxo pipefail
+          go run ./build/test
+          go run ./build
+
+      - name: Upload Linux release packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-packages
+          path: |
+            .output/release/*.deb
+            .output/release/*.rpm
+            .output/release/*.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  env_linux_amd64:
+    name: Environment tests (linux-amd64)
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        run: |
+          set -euxo pipefail
+          go build -o conch ./cmd/conch
+          sudo install -m 0755 conch /usr/local/bin/conch
+          conch --version
+          for f in tests/*.toml; do
+            name=$(basename "$f" .toml)
+            mkdir -p "$RUNNER_TEMP/$name"
+            cp "$f" "$RUNNER_TEMP/$name/conch.toml"
+          done
+
+      - name: Install Linux amd64 environment
+        working-directory: ${{ runner.temp }}/linux-amd64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euxo pipefail
+          test -f .gitignore
+          grep -Fxq '.conch/' .gitignore
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
+
+  env_linux_arm64:
+    name: Environment tests (linux-arm64)
+    needs: build_and_test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        run: |
+          set -euxo pipefail
+          go build -o conch ./cmd/conch
+          sudo install -m 0755 conch /usr/local/bin/conch
+          conch --version
+          for f in tests/*.toml; do
+            name=$(basename "$f" .toml)
+            mkdir -p "$RUNNER_TEMP/$name"
+            cp "$f" "$RUNNER_TEMP/$name/conch.toml"
+          done
+
+      - name: Install Linux arm64 environment
+        working-directory: ${{ runner.temp }}/linux-arm64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euxo pipefail
+          test -f .gitignore
+          grep -Fxq '.conch/' .gitignore
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
+
+  env_windows_amd64:
+    name: Environment tests (windows-amd64)
+    needs: build_and_test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        shell: pwsh
+        run: |
+          go build -o conch.exe ./cmd/conch
+
+          $bin = Join-Path -Path $env:USERPROFILE -ChildPath ".conch-bin"
+          New-Item -Path $bin -ItemType Directory -Force > $null
+          Copy-Item -Path "conch.exe" -Destination (Join-Path $bin "conch.exe") -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          $env:PATH = "$bin;$env:PATH"
+          conch --version
+
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $f.BaseName
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination (Join-Path $dest "conch.toml") -Force
+          }
+
+      - name: Install Windows amd64 environment
+        working-directory: ${{ runner.temp }}/windows-amd64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) { throw ".gitignore was not created" }
+          if ((Get-Content -Path .gitignore) -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
+          }
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
+
+  env_windows_arm64:
+    name: Environment tests (windows-arm64)
+    needs: build_and_test
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        shell: pwsh
+        run: |
+          go build -o conch.exe ./cmd/conch
+
+          $bin = Join-Path -Path $env:USERPROFILE -ChildPath ".conch-bin"
+          New-Item -Path $bin -ItemType Directory -Force > $null
+          Copy-Item -Path "conch.exe" -Destination (Join-Path $bin "conch.exe") -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          $env:PATH = "$bin;$env:PATH"
+          conch --version
+
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $f.BaseName
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination (Join-Path $dest "conch.toml") -Force
+          }
+
+      - name: Install Windows arm64 environment
+        working-directory: ${{ runner.temp }}/windows-arm64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) { throw ".gitignore was not created" }
+          if ((Get-Content -Path .gitignore) -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
+          }
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
+
+  pkg_linux_amd64:
+    name: Package tests (linux-amd64)
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux release packages
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-release-packages
+          path: .output/release
+
+      - name: Test DEB package install
+        run: |
+          set -euxo pipefail
+          sudo dpkg -i .output/release/conch_*_amd64.deb
+          command -v conch
+          conch --version
+
+      - name: Test RPM package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work redhat/ubi9 sh -c '
+            set -eux
+            dnf install -y /work/.output/release/conch_*_amd64.rpm
+            command -v conch
+            conch --version
+          '
+
+      - name: Test APK package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work alpine:latest sh -c '
+            set -eux
+            apk add --allow-untrusted /work/.output/release/conch_*_amd64.apk
+            command -v conch
+            conch --version
+          '
+
+  pkg_linux_arm64:
+    name: Package tests (linux-arm64)
+    needs: build_and_test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download Linux release packages
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-release-packages
+          path: .output/release
+
+      - name: Test DEB package install
+        run: |
+          set -euxo pipefail
+          sudo dpkg -i .output/release/conch_*_arm64.deb
+          command -v conch
+          conch --version
+
+      - name: Test RPM package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work redhat/ubi9 sh -c '
+            set -eux
+            dnf install -y /work/.output/release/conch_*_arm64.rpm
+            command -v conch
+            conch --version
+          '
+
+      - name: Test APK package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work alpine:latest sh -c '
+            set -eux
+            apk add --allow-untrusted /work/.output/release/conch_*_arm64.apk
+            command -v conch
+            conch --version
+          '

@@ -64,12 +64,26 @@ func runInstall() error {
 // it); shell/run pass true too so users see why their command was
 // fast.
 //
+// On failure the UI's live frame is torn down before the error is
+// returned — errors escape to cmd/conch's top-level reporter, which
+// prints outside the UI and would otherwise land on the tail of an
+// unfinished spinner line.
+func ensureInstalled(u *ui.UI, m *manifest.Manifest, layout env.Layout, host platform.Platform, verbose bool) error {
+	if err := materialise(u, m, layout, host, verbose); err != nil {
+		u.Fail()
+		return err
+	}
+	return nil
+}
+
+// materialise does the work behind ensureInstalled.
+//
 // activate.ps1 is regenerated on every call because tasks and
 // preferences are not tracked anywhere else — editing conch.toml's
 // [tasks] table without changing module versions would otherwise
 // leave the old activate.ps1 in place, and `conch run new-task`
 // would fail looking for a function that no script defines.
-func ensureInstalled(u *ui.UI, m *manifest.Manifest, layout env.Layout, host platform.Platform, verbose bool) error {
+func materialise(u *ui.UI, m *manifest.Manifest, layout env.Layout, host platform.Platform, verbose bool) error {
 	lock, err := readOptionalLockfile(layout.LockfilePath())
 	if err != nil {
 		return fmt.Errorf("read lockfile: %w", err)

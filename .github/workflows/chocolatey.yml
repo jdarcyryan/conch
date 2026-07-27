@@ -1,0 +1,154 @@
+name: Chocolatey
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Manual-only pipeline that ships the latest release's .nupkg to the
+# Chocolatey community repository. Nothing here builds from source —
+# every job exercises the artefact users would actually install:
+#
+#   * check_branch hard-gates the workflow to main.
+#   * pkg_windows_amd64 downloads the .nupkg attached to the latest
+#     GitHub release and proves choco can install it and put conch on
+#     PATH.
+#   * env_windows_amd64 installs conch the same way and re-runs the
+#     Environment tests from integration.yml/release.yml against that
+#     choco-installed binary.
+#   * push only runs once both test jobs pass, then registers the
+#     CHOCO_API_KEY repo secret and pushes the same .nupkg to
+#     push.chocolatey.org.
+
+jobs:
+  check_branch:
+    name: Check Branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse non-main branch
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "Chocolatey workflow only runs on 'main' (got '$GITHUB_REF_NAME')." >&2
+            exit 1
+          fi
+          echo "Running on 'main' — proceeding."
+
+  pkg_windows_amd64:
+    name: Package tests (windows-amd64)
+    needs: check_branch
+    runs-on: windows-latest
+    steps:
+      - name: Download .nupkg from latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "nupkg"
+          gh release download --repo $env:GITHUB_REPOSITORY --pattern '*.nupkg' --dir $dir
+          if (-not (Get-ChildItem -Path $dir -Filter *.nupkg)) {
+              throw "Latest release has no .nupkg asset."
+          }
+
+      - name: Test Chocolatey package install
+        shell: pwsh
+        run: |
+          choco install conch -y --source (Join-Path $env:RUNNER_TEMP "nupkg")
+          Get-Command conch
+          conch --version
+
+  env_windows_amd64:
+    name: Environment tests (windows-amd64)
+    needs: pkg_windows_amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install conch from latest release .nupkg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "nupkg"
+          gh release download --repo $env:GITHUB_REPOSITORY --pattern '*.nupkg' --dir $dir
+          choco install conch -y --source $dir
+          conch --version
+
+      - name: Scaffold test fixtures
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $f.BaseName
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination (Join-Path $dest "conch.toml") -Force
+          }
+
+      - name: Install Windows amd64 environment
+        working-directory: ${{ runner.temp }}/windows-amd64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) { throw ".gitignore was not created" }
+          if ((Get-Content -Path .gitignore) -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
+          }
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
+
+  push:
+    name: Push to Chocolatey Community
+    needs:
+      - pkg_windows_amd64
+      - env_windows_amd64
+    runs-on: windows-latest
+    steps:
+      - name: Download .nupkg from latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "nupkg"
+          gh release download --repo $env:GITHUB_REPOSITORY --pattern '*.nupkg' --dir $dir
+
+      - name: Push .nupkg to the Chocolatey community repository
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        shell: pwsh
+        run: |
+          $nupkg = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP "nupkg") -Filter *.nupkg |
+              Select-Object -First 1
+          if (-not $nupkg) { throw "Latest release has no .nupkg asset." }
+
+          choco apikey --key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
+          choco push $nupkg.FullName --source https://push.chocolatey.org/

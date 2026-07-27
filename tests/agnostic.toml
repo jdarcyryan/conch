@@ -1,0 +1,20 @@
+# agnostic.toml
+#
+# CI fixture: no `platforms` field, so every supported OS/arch must be
+# able to install this manifest. Doubles as the host for post-install
+# command coverage (summary, tasks, run) — those steps run against this
+# environment after `conch install`.
+
+[project]
+name = "agnostic"
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
+
+[tasks]
+hello = 'Write-Host "hello from conch"'
+psversion = 'Write-Host $PSVersionTable.PSVersion'

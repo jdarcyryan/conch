@@ -1,0 +1,23 @@
+# Root markdown and docs
+*.md
+docs/
+
+# Mirrored from .gitignore
+# JetBrains GoLand
+.idea/
+
+# Claude settings
+.claude/
+
+# Ad-hoc build artifacts
+*.nupkg
+*.rpm
+*.deb
+*.apk
+*.exe
+conch
+!conch/
+
+# Build
+.output
+*.syso

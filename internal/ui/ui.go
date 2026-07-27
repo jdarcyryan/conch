@@ -131,6 +131,24 @@ func (u *UI) Errorf(format string, args ...any) {
 	u.line("error", "✗ ", format, args...)
 }
 
+// Fail abandons any live frame — spinner and/or download bar — and
+// leaves the cursor at the start of a cleared line. Call it before
+// returning an error that something outside the UI (cmd/conch's
+// top-level error reporter) will print; without it the error appends
+// to the spinner's unfinished line. No-op in log mode, where every
+// line is already newline-terminated.
+func (u *UI) Fail() {
+	u.tearDownFrame()
+	if u.mode != ModeTUI {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	// tearDownFrame leaves the cursor on the (still-painted) spinner
+	// row; wipe it so the error starts on a clean line.
+	fmt.Fprint(u.out, ansiClearLine)
+}
+
 // tearDownFrame stops the spinner and detaches any in-progress
 // download so subsequent line() output isn't fighting either of them
 // for the cursor.

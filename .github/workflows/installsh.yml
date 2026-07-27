@@ -1,0 +1,104 @@
+name: Install Script
+
+# Runs after a Release workflow completes and proves the published
+# install.sh works end-to-end for every packaging format and
+# architecture. Triggered via workflow_run rather than `on: release`
+# because releases created with GITHUB_TOKEN (as the Release workflow's
+# `gh release create` does) never emit events that start other
+# workflows.
+#
+# Every job pulls install.sh from the latest release, pipes it through
+# sh exactly as the docs instruct, and verifies conch lands on PATH.
+# deb runs on the runner itself (Ubuntu is Debian-family); rpm and apk
+# run inside redhat/ubi9 and alpine containers, mirroring the Package
+# tests in integration.yml/release.yml.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+jobs:
+  deb_amd64:
+    name: Install.sh tests (deb-amd64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          curl -fsSL https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sudo sh
+          command -v conch
+          conch --version
+
+  deb_arm64:
+    name: Install.sh tests (deb-arm64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          curl -fsSL https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sudo sh
+          command -v conch
+          conch --version
+
+  rpm_amd64:
+    name: Install.sh tests (rpm-amd64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          docker run --rm redhat/ubi9 sh -c '
+            set -eux
+            curl -fsSL https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sh
+            command -v conch
+            conch --version
+          '
+
+  rpm_arm64:
+    name: Install.sh tests (rpm-arm64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          docker run --rm redhat/ubi9 sh -c '
+            set -eux
+            curl -fsSL https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sh
+            command -v conch
+            conch --version
+          '
+
+  apk_amd64:
+    name: Install.sh tests (apk-amd64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          docker run --rm alpine:latest sh -c '
+            set -eux
+            wget -qO- https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sh
+            command -v conch
+            conch --version
+          '
+
+  apk_arm64:
+    name: Install.sh tests (apk-arm64)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Install via install.sh and verify PATH
+        run: |
+          set -euxo pipefail
+          docker run --rm alpine:latest sh -c '
+            set -eux
+            wget -qO- https://github.com/jdarcyryan/conch/releases/latest/download/install.sh | sh
+            command -v conch
+            conch --version
+          '

@@ -1,0 +1,581 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+# Tokens minted for this workflow need write access to the release
+# (gh release create) and to GitHub Packages (dotnet nuget push).
+permissions:
+  contents: write
+  packages: write
+
+# Release pipeline. Mirrors integration.yml — same per-platform
+# Environment and Package tests against the same goreleaser snapshot —
+# and adds the bits unique to a publish:
+#
+#   * The workflow runs on every push to main and on manual dispatch.
+#   * check_version refuses any branch other than the repo's
+#     configured default and gates on whether the resolved version
+#     already exists as either a GitHub release tag or a NuGet
+#     package version on GitHub Packages. An already-published
+#     version fails a manual dispatch loudly, but on a push it skips
+#     the rest of the workflow instead — pushes to main that don't
+#     bump snapshot.version_template are routine, not errors.
+#   * build_and_test runs on windows-latest — the only runner with
+#     choco on PATH, which goreleaser's chocolatey packager shells
+#     out to — so the snapshot includes the .nupkg alongside the
+#     Linux packages (nfpm and the archivers are pure Go and build
+#     those fine from Windows). .gitattributes pins *.go/*.sh to LF
+#     so the runner's core.autocrlf=true can't break gofmt or bake
+#     CRs into install.sh.
+#   * publish at the tail downloads the snapshot built by
+#     build_and_test and ships everything under .output/release/ as
+#     a tagged GitHub release with install instructions on top of
+#     GitHub's auto-generated changelog. The .nupkg is pushed to
+#     GitHub Packages via dotnet nuget; a snapshot without one fails
+#     the job rather than silently shipping an incomplete release.
+#   * smoke_install runs the exact install one-liner from the release
+#     notes against the just-published assets. The package tests
+#     install the .deb directly, so without this the install.sh path
+#     itself would never execute in CI.
+
+jobs:
+  check_version:
+    name: Check Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      proceed: ${{ steps.gate.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Refuse non-default branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          default=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)
+          if [ "$GITHUB_REF_NAME" != "$default" ]; then
+            echo "Release workflow only runs on the repository default branch '$default' (got '$GITHUB_REF_NAME')." >&2
+            exit 1
+          fi
+          echo "Running on default branch '$default' — proceeding."
+
+      - name: Resolve version from goreleaser.yaml
+        id: compute
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^[[:space:]]*version_template:[[:space:]]*\([^[:space:]]\+\).*/\1/p' goreleaser.yaml | head -n 1)
+          if [ -z "$version" ]; then
+            echo "snapshot.version_template not found in goreleaser.yaml" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: $version"
+
+      - name: Gate on version not already published
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.compute.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          published=""
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            published="GitHub release tag"
+          else
+            # /users/.../packages/... and /orgs/.../packages/... are
+            # mutually exclusive — one returns the version list, the
+            # other returns 404 — so try both and treat the union as
+            # the published set. If neither endpoint resolves the
+            # package has never been pushed, which is what we want.
+            existing=$( (gh api "users/${OWNER}/packages/nuget/conch/versions" --jq '.[].name' 2>/dev/null \
+                      || gh api "orgs/${OWNER}/packages/nuget/conch/versions"  --jq '.[].name' 2>/dev/null \
+                      || true) | sort -u)
+            if [ -n "$existing" ] && echo "$existing" | grep -qFx "$VERSION"; then
+              published="NuGet package on GitHub Packages"
+            fi
+          fi
+
+          if [ -z "$published" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION not yet published — clear to proceed."
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Routine push without a version bump: skip the release
+            # instead of failing the run.
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION already published ($published) — nothing to release for this push."
+          else
+            echo "Version $VERSION already published ($published) — bump snapshot.version_template in goreleaser.yaml before re-running." >&2
+            exit 1
+          fi
+
+  build_and_test:
+    name: Build and Test
+    # windows-latest so the goreleaser chocolatey packager finds choco
+    # and the snapshot includes the .nupkg. build/main.go only skips
+    # chocolatey on non-Windows hosts.
+    #
+    # Skipping here cascades: every other job (env/pkg tests, publish)
+    # needs this one, so a push without a version bump ends after
+    # check_version.
+    needs: check_version
+    if: needs.check_version.outputs.proceed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+
+      - name: Run static checks, unit tests, and goreleaser snapshot
+        shell: bash
+        run: |
+          set -euxo pipefail
+          go run ./build/test
+          go run ./build
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: .output/release/*
+          if-no-files-found: error
+          retention-days: 1
+
+  env_linux_amd64:
+    name: Environment tests (linux-amd64)
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        run: |
+          set -euxo pipefail
+          go build -o conch ./cmd/conch
+          sudo install -m 0755 conch /usr/local/bin/conch
+          conch --version
+          for f in tests/*.toml; do
+            name=$(basename "$f" .toml)
+            mkdir -p "$RUNNER_TEMP/$name"
+            cp "$f" "$RUNNER_TEMP/$name/conch.toml"
+          done
+
+      - name: Install Linux amd64 environment
+        working-directory: ${{ runner.temp }}/linux-amd64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euxo pipefail
+          test -f .gitignore
+          grep -Fxq '.conch/' .gitignore
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
+
+  env_linux_arm64:
+    name: Environment tests (linux-arm64)
+    needs: build_and_test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        run: |
+          set -euxo pipefail
+          go build -o conch ./cmd/conch
+          sudo install -m 0755 conch /usr/local/bin/conch
+          conch --version
+          for f in tests/*.toml; do
+            name=$(basename "$f" .toml)
+            mkdir -p "$RUNNER_TEMP/$name"
+            cp "$f" "$RUNNER_TEMP/$name/conch.toml"
+          done
+
+      - name: Install Linux arm64 environment
+        working-directory: ${{ runner.temp }}/linux-arm64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euxo pipefail
+          test -f .gitignore
+          grep -Fxq '.conch/' .gitignore
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        run: |
+          set -euo pipefail
+          sep() { printf '\n\033[38;2;105;181;230m── %s ──\033[0m\n' "$1"; }
+
+          sep "summary (human)";       conch summary
+          sep "summary (json)";        conch summary --format json
+          sep "summary (yaml)";        conch summary --format yaml
+          sep "summary (toml)";        conch summary --format toml
+          sep "summary (xml)";         conch summary --format xml
+
+          sep "tasks (human)";         conch tasks
+          sep "tasks (json)";          conch tasks --format json
+          sep "tasks (yaml)";          conch tasks --format yaml
+          sep "tasks (toml)";          conch tasks --format toml
+          sep "tasks (xml)";           conch tasks --format xml
+
+          sep "run hello (min-ui)";    conch run hello --min-ui
+          sep "run psversion";         conch run psversion
+
+  env_windows_amd64:
+    name: Environment tests (windows-amd64)
+    needs: build_and_test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        shell: pwsh
+        run: |
+          go build -o conch.exe ./cmd/conch
+
+          $bin = Join-Path -Path $env:USERPROFILE -ChildPath ".conch-bin"
+          New-Item -Path $bin -ItemType Directory -Force > $null
+          Copy-Item -Path "conch.exe" -Destination (Join-Path $bin "conch.exe") -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          $env:PATH = "$bin;$env:PATH"
+          conch --version
+
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $f.BaseName
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination (Join-Path $dest "conch.toml") -Force
+          }
+
+      - name: Install Windows amd64 environment
+        working-directory: ${{ runner.temp }}/windows-amd64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) { throw ".gitignore was not created" }
+          if ((Get-Content -Path .gitignore) -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
+          }
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
+
+  env_windows_arm64:
+    name: Environment tests (windows-arm64)
+    needs: build_and_test
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build conch, install onto PATH, and scaffold test fixtures
+        shell: pwsh
+        run: |
+          go build -o conch.exe ./cmd/conch
+
+          $bin = Join-Path -Path $env:USERPROFILE -ChildPath ".conch-bin"
+          New-Item -Path $bin -ItemType Directory -Force > $null
+          Copy-Item -Path "conch.exe" -Destination (Join-Path $bin "conch.exe") -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+          $env:PATH = "$bin;$env:PATH"
+          conch --version
+
+          foreach ($f in Get-ChildItem -Path tests -Filter *.toml) {
+              $dest = Join-Path -Path $env:RUNNER_TEMP -ChildPath $f.BaseName
+              New-Item -Path $dest -ItemType Directory -Force > $null
+              Copy-Item -Path $f.FullName -Destination (Join-Path $dest "conch.toml") -Force
+          }
+
+      - name: Install Windows arm64 environment
+        working-directory: ${{ runner.temp }}/windows-arm64
+        run: conch install --min-ui
+
+      - name: Install cross-platform environment
+        working-directory: ${{ runner.temp }}/agnostic
+        run: conch install --min-ui
+
+      - name: Verify .gitignore lists .conch/
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path .gitignore)) { throw ".gitignore was not created" }
+          if ((Get-Content -Path .gitignore) -notcontains '.conch/') {
+              throw ".gitignore does not list .conch/"
+          }
+
+      - name: Exercise summary, tasks, and run across formats and UI modes
+        working-directory: ${{ runner.temp }}/agnostic
+        shell: pwsh
+        run: |
+          $esc = [char]27
+          function Show-Sep($label) {
+              Write-Host ""
+              Write-Host "$esc[38;2;105;181;230m`u{2500}`u{2500} $label `u{2500}`u{2500}$esc[0m"
+          }
+
+          Show-Sep "summary (human)";     conch summary
+          Show-Sep "summary (json)";      conch summary --format json
+          Show-Sep "summary (yaml)";      conch summary --format yaml
+          Show-Sep "summary (toml)";      conch summary --format toml
+          Show-Sep "summary (xml)";       conch summary --format xml
+
+          Show-Sep "tasks (human)";       conch tasks
+          Show-Sep "tasks (json)";        conch tasks --format json
+          Show-Sep "tasks (yaml)";        conch tasks --format yaml
+          Show-Sep "tasks (toml)";        conch tasks --format toml
+          Show-Sep "tasks (xml)";         conch tasks --format xml
+
+          Show-Sep "run hello (min-ui)";  conch run hello --min-ui
+          Show-Sep "run psversion";       conch run psversion
+
+  pkg_linux_amd64:
+    name: Package tests (linux-amd64)
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .output/release
+
+      - name: Test DEB package install
+        run: |
+          set -euxo pipefail
+          sudo dpkg -i .output/release/conch_*_amd64.deb
+          command -v conch
+          conch --version
+
+      - name: Test RPM package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work redhat/ubi9 sh -c '
+            set -eux
+            dnf install -y /work/.output/release/conch_*_amd64.rpm
+            command -v conch
+            conch --version
+          '
+
+      - name: Test APK package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work alpine:latest sh -c '
+            set -eux
+            apk add --allow-untrusted /work/.output/release/conch_*_amd64.apk
+            command -v conch
+            conch --version
+          '
+
+  pkg_linux_arm64:
+    name: Package tests (linux-arm64)
+    needs: build_and_test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .output/release
+
+      - name: Test DEB package install
+        run: |
+          set -euxo pipefail
+          sudo dpkg -i .output/release/conch_*_arm64.deb
+          command -v conch
+          conch --version
+
+      - name: Test RPM package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work redhat/ubi9 sh -c '
+            set -eux
+            dnf install -y /work/.output/release/conch_*_arm64.rpm
+            command -v conch
+            conch --version
+          '
+
+      - name: Test APK package install
+        run: |
+          set -euxo pipefail
+          docker run --rm -v "${PWD}:/work" -w /work alpine:latest sh -c '
+            set -eux
+            apk add --allow-untrusted /work/.output/release/conch_*_arm64.apk
+            command -v conch
+            conch --version
+          '
+
+  publish:
+    name: Publish Release
+    needs:
+      - check_version
+      - build_and_test
+      - env_linux_amd64
+      - env_linux_arm64
+      - env_windows_amd64
+      - env_windows_arm64
+      - pkg_linux_amd64
+      - pkg_linux_arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .output/release
+
+      - name: Create GitHub release with all assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check_version.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euxo pipefail
+
+          # The install snippet rides on top of the auto-generated
+          # changelog. GitHub's API pre-pends `body` before the
+          # content produced by --generate-notes, so users see how to
+          # install the release first and the "What's Changed" list
+          # right beneath it. Backticks in the heredoc are escaped so
+          # the unquoted EOF still expands ${VERSION}/${OWNER}/${REPO}
+          # without firing command substitution on the fenced blocks.
+          notes=$(cat <<EOF
+          ## Install
+
+          ### Linux
+
+          \`\`\`sh
+          curl -fsSL https://github.com/${REPO}/releases/download/${VERSION}/install.sh | sudo sh
+          \`\`\`
+
+          ### Windows
+
+          \`\`\`powershell
+          choco install conch --version ${VERSION} --source https://community.chocolatey.org/api/v2
+          \`\`\`
+          EOF
+          )
+
+          gh release create "$VERSION" \
+            .output/release/* \
+            --title "$VERSION" \
+            --notes "$notes" \
+            --generate-notes
+
+      - name: Push .nupkg to GitHub Packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euxo pipefail
+          pushed=0
+          for nupkg in .output/release/*.nupkg; do
+            [ -f "$nupkg" ] || continue
+            dotnet nuget push "$nupkg" \
+              --source "https://nuget.pkg.github.com/${OWNER}/index.json" \
+              --api-key "$GH_TOKEN" \
+              --skip-duplicate
+            pushed=$((pushed + 1))
+          done
+          if [ "$pushed" -eq 0 ]; then
+            echo "No .nupkg in release artifacts — the Windows build should always produce one." >&2
+            exit 1
+          fi
+          

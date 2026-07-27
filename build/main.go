@@ -4,6 +4,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,7 +14,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -37,7 +42,15 @@ func main() {
 	run("go-winres", "make", "--in", "winres/winres.json")
 
 	step("Running goreleaser")
-	run("goreleaser", "release", "--snapshot", "--clean")
+	// chocolatey's packager shells out to `choco`, which is Windows-only
+	// (it needs mono on Linux and isn't worth the dependency in CI).
+	// Skip it everywhere except a Windows host, where local devs still
+	// get the .nupkg.
+	gargs := []string{"release", "--snapshot", "--clean"}
+	if runtime.GOOS != "windows" {
+		gargs = append(gargs, "--skip=chocolatey")
+	}
+	run("goreleaser", gargs...)
 
 	step("Cleaning up .syso files")
 	cleanSyso()
@@ -48,24 +61,34 @@ func main() {
 	step("Copying native binary to root")
 	copyNativeBinary()
 
-	step("Scaffolding example projects under .output/tests")
-	scaffoldExampleProjects()
+	step("Copying install.sh into release outputs")
+	copyInstaller()
+
+	step("Adding install.sh and .nupkg entries to checksums.txt")
+	extendChecksums()
+
+	step("Scaffolding example projects under .output/examples")
+	scaffoldProjects("examples/*.toml", ".output/examples")
+
+	step("Scaffolding CI test fixtures under .output/tests")
+	scaffoldProjects("tests/*.toml", ".output/tests")
 
 	step("Done")
 }
 
-// scaffoldExampleProjects materialises one project directory per
-// example manifest under .output/tests/<basename>/conch.toml. This
-// gives us throwaway sandboxes to drive the freshly-built binary
-// against — `cd .output/tests/04-tasks && conch install` runs the
-// example without touching the source tree.
-func scaffoldExampleProjects() {
-	matches, err := filepath.Glob("examples/*.toml")
+// scaffoldProjects materialises one project directory per source
+// manifest under destBase/<basename>/conch.toml. This gives us
+// throwaway sandboxes to drive the freshly-built binary against —
+// `cd .output/examples/04-tasks && conch install` runs the example
+// without touching the source tree. The same shape is used for CI
+// fixtures from `tests/`, which CI iterates over per platform.
+func scaffoldProjects(srcGlob, destBase string) {
+	matches, err := filepath.Glob(srcGlob)
 	must(err)
 
 	for _, src := range matches {
 		base := strings.TrimSuffix(filepath.Base(src), ".toml")
-		dest := filepath.Join(".output/tests", base, "conch.toml")
+		dest := filepath.Join(destBase, base, "conch.toml")
 		log.Printf("seeding %s → %s", src, dest)
 		must(os.MkdirAll(filepath.Dir(dest), 0o755))
 		must(copyFile(src, dest))
@@ -124,6 +147,101 @@ func copyNativeBinary() {
 
 	log.Printf("copying %s → %s", src, dest)
 	must(copyFile(src, dest))
+}
+
+// copyInstaller renders build/install.sh into
+// .output/release/install.sh with the goreleaser snapshot version
+// baked in. Each release ships a version-pinned script next to its
+// packages, so users get a stable URL per release and no GitHub API
+// dependency at install time.
+func copyInstaller() {
+	version := goreleaserSnapshotVersion()
+	tmpl, err := os.ReadFile("build/install.sh")
+	must(err)
+
+	// Normalise to LF regardless of how git checked the template out
+	// (core.autocrlf on Windows yields CRLF) — a CR baked into the URL
+	// line makes curl on the target machine fail with "URL using
+	// bad/illegal format or missing URL".
+	rendered := strings.ReplaceAll(string(tmpl), "\r\n", "\n")
+	rendered = strings.ReplaceAll(rendered, "__CONCH_VERSION__", version)
+	dest := ".output/release/install.sh"
+
+	log.Printf("rendering build/install.sh (version=%s) → %s", version, dest)
+	must(os.MkdirAll(filepath.Dir(dest), 0o755))
+	must(os.WriteFile(dest, []byte(rendered), 0o755))
+}
+
+// goreleaserSnapshotVersion lifts the snapshot.version_template value
+// out of goreleaser.yaml. Until conch cuts real tags, this is the
+// version stamped into produced packages and therefore the version
+// install.sh needs to download.
+var versionTemplateRE = regexp.MustCompile(`(?m)^\s*version_template:\s*(\S+)\s*$`)
+
+func goreleaserSnapshotVersion() string {
+	data, err := os.ReadFile("goreleaser.yaml")
+	must(err)
+	m := versionTemplateRE.FindStringSubmatch(string(data))
+	if len(m) < 2 {
+		log.Fatal("could not find snapshot.version_template in goreleaser.yaml")
+	}
+	return m[1]
+}
+
+// extendChecksums folds install.sh and any .nupkg files into the
+// goreleaser-produced checksums.txt. Goreleaser only checksums the
+// artifacts it knows about, and it neither tracks the chocolatey
+// .nupkg (sourced via glob in sortOutput) nor install.sh (rendered
+// after goreleaser exits), so we hash them ourselves and merge the
+// rows back in, alphabetised to match goreleaser's own ordering.
+func extendChecksums() {
+	csPath := ".output/release/checksums.txt"
+	data, err := os.ReadFile(csPath)
+	must(err)
+
+	entries := map[string]string{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		entries[fields[1]] = fields[0]
+	}
+
+	extras, _ := filepath.Glob(".output/release/*.nupkg")
+	extras = append(extras, ".output/release/install.sh")
+	for _, p := range extras {
+		sum, err := sha256File(p)
+		must(err)
+		name := filepath.Base(p)
+		entries[name] = sum
+		log.Printf("checksummed %s", name)
+	}
+
+	names := make([]string, 0, len(entries))
+	for n := range entries {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	var buf bytes.Buffer
+	for _, n := range names {
+		fmt.Fprintf(&buf, "%s  %s\n", entries[n], n)
+	}
+	must(os.WriteFile(csPath, buf.Bytes(), 0o644))
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // nativeTargetDir returns the goreleaser-style folder name for the

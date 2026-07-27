@@ -1,0 +1,15 @@
+# linux-arm64.toml
+#
+# CI fixture: restricted to Linux on arm64. Installs cleanly on an
+# ubuntu-24.04-arm runner; conch must refuse it on any other platform.
+
+[project]
+name = "linux-arm64"
+platforms = ["linux-arm64"]
+
+[powershell]
+version = "7.5.6"
+
+[modules]
+Pester = "5.7.1"
+PSScriptAnalyzer = "1.25.0"
