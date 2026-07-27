@@ -70,6 +70,36 @@ func TestTUIStepStartsSpinnerThenDoneFinalises(t *testing.T) {
 	}
 }
 
+func TestTUIFailClearsSpinnerLine(t *testing.T) {
+	u, out, _ := fixedTime(ModeTUI, time.Now())
+
+	u.Step("resolving module PSToml latest")
+	u.Fail()
+
+	// The last write must be a clear-line so whatever prints next —
+	// the top-level error reporter on stderr — starts at column 0 of
+	// a blank line instead of appending to the spinner frame.
+	got := out.String()
+	if !strings.HasSuffix(got, ansiClearLine) {
+		t.Errorf("Fail should leave the cursor on a cleared line, got %q", got)
+	}
+	if u.activeStep != nil {
+		t.Error("Fail should have stopped the spinner")
+	}
+}
+
+func TestLogModeFailWritesNothing(t *testing.T) {
+	u, out, errBuf := fixedTime(ModeLog, time.Now())
+
+	u.Step("resolving module PSToml latest")
+	before := out.String()
+	u.Fail()
+
+	if out.String() != before || errBuf.Len() != 0 {
+		t.Errorf("Fail must be a no-op in log mode, stdout %q stderr %q", out.String(), errBuf.String())
+	}
+}
+
 func TestDownloadWriteCountsBytes(t *testing.T) {
 	u, _, _ := fixedTime(ModeLog, time.Now())
 	d := u.BeginDownload("file.zip", 1000)
