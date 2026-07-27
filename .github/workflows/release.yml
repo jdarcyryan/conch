@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 # Tokens minted for this workflow need write access to the release
@@ -13,10 +16,14 @@ permissions:
 # Environment and Package tests against the same goreleaser snapshot —
 # and adds the bits unique to a publish:
 #
+#   * The workflow runs on every push to main and on manual dispatch.
 #   * check_version refuses any branch other than the repo's
-#     configured default and fails if the resolved version already
-#     exists as either a GitHub release tag or a NuGet package
-#     version on GitHub Packages.
+#     configured default and gates on whether the resolved version
+#     already exists as either a GitHub release tag or a NuGet
+#     package version on GitHub Packages. An already-published
+#     version fails a manual dispatch loudly, but on a push it skips
+#     the rest of the workflow instead — pushes to main that don't
+#     bump snapshot.version_template are routine, not errors.
 #   * build_and_test runs on windows-latest — the only runner with
 #     choco on PATH, which goreleaser's chocolatey packager shells
 #     out to — so the snapshot includes the .nupkg alongside the
@@ -41,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.compute.outputs.version }}
+      proceed: ${{ steps.gate.outputs.proceed }}
     steps:
       - uses: actions/checkout@v5
 
@@ -68,19 +76,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Resolved release version: $version"
 
-      - name: Verify GitHub release tag does not already exist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.compute.outputs.version }}
-        run: |
-          set -euo pipefail
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "Release '$VERSION' already exists — bump snapshot.version_template in goreleaser.yaml before re-running." >&2
-            exit 1
-          fi
-          echo "Release tag '$VERSION' not yet published — clear to proceed."
-
-      - name: Verify nuget package version does not already exist
+      - name: Gate on version not already published
+        id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.compute.outputs.version }}
@@ -88,27 +85,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          # /users/.../packages/... and /orgs/.../packages/... are
-          # mutually exclusive — one returns the version list, the
-          # other returns 404 — so try both and treat the union as
-          # the published set. If neither endpoint resolves the
-          # package has never been pushed, which is what we want.
-          existing=$( (gh api "users/${OWNER}/packages/nuget/conch/versions" --jq '.[].name' 2>/dev/null \
-                    || gh api "orgs/${OWNER}/packages/nuget/conch/versions"  --jq '.[].name' 2>/dev/null \
-                    || true) | sort -u)
+          published=""
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            published="GitHub release tag"
+          else
+            # /users/.../packages/... and /orgs/.../packages/... are
+            # mutually exclusive — one returns the version list, the
+            # other returns 404 — so try both and treat the union as
+            # the published set. If neither endpoint resolves the
+            # package has never been pushed, which is what we want.
+            existing=$( (gh api "users/${OWNER}/packages/nuget/conch/versions" --jq '.[].name' 2>/dev/null \
+                      || gh api "orgs/${OWNER}/packages/nuget/conch/versions"  --jq '.[].name' 2>/dev/null \
+                      || true) | sort -u)
+            if [ -n "$existing" ] && echo "$existing" | grep -qFx "$VERSION"; then
+              published="NuGet package on GitHub Packages"
+            fi
+          fi
 
-          if [ -n "$existing" ] && echo "$existing" | grep -qFx "$VERSION"; then
-            echo "NuGet package conch $VERSION already exists on GitHub Packages — bump snapshot.version_template in goreleaser.yaml before re-running." >&2
+          if [ -z "$published" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION not yet published — clear to proceed."
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Routine push without a version bump: skip the release
+            # instead of failing the run.
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION already published ($published) — nothing to release for this push."
+          else
+            echo "Version $VERSION already published ($published) — bump snapshot.version_template in goreleaser.yaml before re-running." >&2
             exit 1
           fi
-          echo "NuGet package conch $VERSION not yet published — clear to proceed."
 
   build_and_test:
     name: Build and Test
     # windows-latest so the goreleaser chocolatey packager finds choco
     # and the snapshot includes the .nupkg. build/main.go only skips
     # chocolatey on non-Windows hosts.
+    #
+    # Skipping here cascades: every other job (env/pkg tests, publish)
+    # needs this one, so a push without a version bump ends after
+    # check_version.
     needs: check_version
+    if: needs.check_version.outputs.proceed == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
