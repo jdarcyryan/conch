@@ -532,7 +532,7 @@ jobs:
           ### Windows
 
           \`\`\`powershell
-          choco install conch --version ${VERSION}
+          choco install conch --version ${VERSION} --source https://community.chocolatey.org/api/v2
           \`\`\`
           EOF
           )
