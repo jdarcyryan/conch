@@ -31,6 +31,20 @@ func defaultClient() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
+// get issues a GET against the module feed, attaching the configured
+// API key when one applies. NuGet v2 feeds authenticate with the
+// X-NuGet-ApiKey header.
+func get(client *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if key := feedAPIKey(); key != "" {
+		req.Header.Set("X-NuGet-ApiKey", key)
+	}
+	return client.Do(req)
+}
+
 // Client is the OData feed front-end. The zero value is usable;
 // construct via &Client{} from the cli wiring.
 type Client struct{}
@@ -64,7 +78,7 @@ func (c *Client) Resolve(name string, spec version.Spec) (Package, error) {
 func (c *Client) ListVersions(name string) ([]Package, error) {
 	client := defaultClient()
 	out := []Package{}
-	next := fmt.Sprintf(findPackagesByIDFmt, url.QueryEscape(name))
+	next := fmt.Sprintf(findPackagesByIDFmt, feedBaseURL(), url.QueryEscape(name))
 	for next != "" {
 		feed, err := getFeed(client, next)
 		if err != nil {
@@ -86,7 +100,7 @@ func (c *Client) ListVersions(name string) ([]Package, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no versions of %s found on PSGallery", name)
+		return nil, fmt.Errorf("no versions of %s found on %s", name, feedBaseURL())
 	}
 	return out, nil
 }
@@ -124,7 +138,7 @@ type odataProperties struct {
 }
 
 func getFeed(client *http.Client, url string) (*atomFeed, error) {
-	resp, err := client.Get(url)
+	resp, err := get(client, url)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}

@@ -140,7 +140,7 @@ func downloadAndVerify(client *http.Client, pkg Package, w io.Writer, u *ui.UI) 
 	if pkg.URL == "" {
 		return fmt.Errorf("package %s %s has no download URL", pkg.Name, pkg.Version)
 	}
-	resp, err := client.Get(pkg.URL)
+	resp, err := get(client, pkg.URL)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", pkg.URL, err)
 	}
