@@ -59,13 +59,16 @@ nfpms:
 # Chocolatey package (.nupkg). Generated locally; not pushed.
 chocolateys:
   - name: conch
-    title: Conch environment manager.
+    title: Conch Environment Manager
     authors: jdarcyryan
     project_url: https://github.com/jdarcyryan/conch
+    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@main/assets/conch_icon_256x256.png
     license_url: https://github.com/jdarcyryan/conch/blob/main/LICENSE
     project_source_url: https://github.com/jdarcyryan/conch
+    package_source_url: https://github.com/jdarcyryan/conch
     docs_url: https://github.com/jdarcyryan/conch/blob/main/README.md
     bug_tracker_url: https://github.com/jdarcyryan/conch/issues
+    tags: environment-management environment-manager go golang nuget package-management package-manager powershell pwsh
     summary: Declarative PowerShell environment manager written in Go.
     description: |
       Conch is a cross-platform, declarative PowerShell environment manager written in Go.
