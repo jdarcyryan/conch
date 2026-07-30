@@ -62,11 +62,13 @@ chocolateys:
     title: Conch Environment Manager
     authors: jdarcyryan
     project_url: https://github.com/jdarcyryan/conch
-    # Icon and license URLs are pinned to a commit SHA (jsDelivr caches permanently,
-    # so branch URLs are discouraged). Only needs updating if the icon changes.
-    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@58b07c1e6131e6baaeef0add074f0ae5f67fd5cf/assets/conch_icon_256x256.png
+    # Icon and license URLs are pinned to the release commit (jsDelivr caches
+    # permanently, so branch URLs are discouraged). Goreleaser does not template
+    # these fields, so build/main.go substitutes __CONCH_COMMIT__ with the HEAD
+    # SHA into a rendered copy of this config before invoking goreleaser.
+    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@__CONCH_COMMIT__/assets/conch_icon_256x256.png
     copyright: Copyright 2026 jdarcyryan
-    license_url: https://github.com/jdarcyryan/conch/blob/58b07c1e6131e6baaeef0add074f0ae5f67fd5cf/LICENSE
+    license_url: https://github.com/jdarcyryan/conch/blob/__CONCH_COMMIT__/LICENSE
     project_source_url: https://github.com/jdarcyryan/conch
     package_source_url: https://github.com/jdarcyryan/conch
     docs_url: https://github.com/jdarcyryan/conch/blob/main/README.md
