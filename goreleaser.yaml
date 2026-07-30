@@ -59,17 +59,23 @@ nfpms:
 # Chocolatey package (.nupkg). Generated locally; not pushed.
 chocolateys:
   - name: conch
-    title: Conch environment manager.
+    title: Conch Environment Manager
     authors: jdarcyryan
     project_url: https://github.com/jdarcyryan/conch
-    license_url: https://github.com/jdarcyryan/conch/blob/main/LICENSE
+    # Icon and license URLs are pinned to the release commit (jsDelivr caches
+    # permanently, so branch URLs are discouraged). Goreleaser does not template
+    # these fields, so build/main.go substitutes __CONCH_COMMIT__ with the HEAD
+    # SHA into a rendered copy of this config before invoking goreleaser.
+    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@__CONCH_COMMIT__/assets/conch_icon_256x256.png
+    copyright: Copyright {{ .Now.Format "2006" }} jdarcyryan. Licensed under the Apache License 2.0.
+    license_url: https://github.com/jdarcyryan/conch/blob/__CONCH_COMMIT__/LICENSE
     project_source_url: https://github.com/jdarcyryan/conch
+    package_source_url: https://github.com/jdarcyryan/conch
     docs_url: https://github.com/jdarcyryan/conch/blob/main/README.md
     bug_tracker_url: https://github.com/jdarcyryan/conch/issues
+    tags: environment-management environment-manager go golang nuget package-management package-manager powershell pwsh
     summary: Declarative PowerShell environment manager written in Go.
-    description: |
-      Conch is a cross-platform, declarative PowerShell environment manager written in Go.
-      Describe your PowerShell versions and modules in a single TOML file.
+    description: Conch is a cross-platform, declarative PowerShell environment manager written in Go.
     release_notes: "https://github.com/jdarcyryan/conch/releases/tag/{{ .Version }}"
     url_template: 'https://github.com/jdarcyryan/conch/releases/download/{{ .Version }}/{{ .ArtifactName }}'
     skip_publish: true

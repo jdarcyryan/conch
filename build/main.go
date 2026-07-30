@@ -41,12 +41,16 @@ func main() {
 	step("Generating Windows resources")
 	run("go-winres", "make", "--in", "winres/winres.json")
 
+	step("Rendering goreleaser config")
+	cfgPath := renderGoreleaserConfig()
+	defer os.Remove(cfgPath)
+
 	step("Running goreleaser")
 	// chocolatey's packager shells out to `choco`, which is Windows-only
 	// (it needs mono on Linux and isn't worth the dependency in CI).
 	// Skip it everywhere except a Windows host, where local devs still
 	// get the .nupkg.
-	gargs := []string{"release", "--snapshot", "--clean"}
+	gargs := []string{"release", "--snapshot", "--clean", "--config", cfgPath}
 	if runtime.GOOS != "windows" {
 		gargs = append(gargs, "--skip=chocolatey")
 	}
@@ -170,6 +174,31 @@ func copyInstaller() {
 	log.Printf("rendering build/install.sh (version=%s) → %s", version, dest)
 	must(os.MkdirAll(filepath.Dir(dest), 0o755))
 	must(os.WriteFile(dest, []byte(rendered), 0o755))
+}
+
+// renderGoreleaserConfig writes a copy of goreleaser.yaml with
+// __CONCH_COMMIT__ replaced by the current HEAD SHA and returns its
+// path. The chocolatey icon and license URLs pin to the release commit
+// (jsDelivr caches permanently, so branch URLs are discouraged), but
+// goreleaser does not run templates over those fields — the
+// substitution has to happen before goreleaser reads the config.
+func renderGoreleaserConfig() string {
+	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	must(err)
+	commit := strings.TrimSpace(string(out))
+
+	data, err := os.ReadFile("goreleaser.yaml")
+	must(err)
+	rendered := strings.ReplaceAll(string(data), "__CONCH_COMMIT__", commit)
+
+	f, err := os.CreateTemp("", "conch-goreleaser-*.yaml")
+	must(err)
+	_, werr := f.WriteString(rendered)
+	must(f.Close())
+	must(werr)
+
+	log.Printf("rendering goreleaser.yaml (commit=%s) → %s", commit, f.Name())
+	return f.Name()
 }
 
 // goreleaserSnapshotVersion lifts the snapshot.version_template value
