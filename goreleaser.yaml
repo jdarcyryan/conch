@@ -73,8 +73,11 @@ chocolateys:
     bug_tracker_url: https://github.com/jdarcyryan/conch/issues
     tags: environment-management environment-manager go golang nuget package-management package-manager powershell pwsh
     summary: Declarative PowerShell environment manager written in Go.
+    # Blank lines between paragraphs are required: Chocolatey renders the
+    # description as Markdown, where single newlines collapse into one paragraph.
     description: |
       Conch is a cross-platform, declarative PowerShell environment manager written in Go.
+
       Describe your PowerShell versions and modules in a single TOML file.
 
       This package supports 64-bit Windows only.
