@@ -62,8 +62,11 @@ chocolateys:
     title: Conch Environment Manager
     authors: jdarcyryan
     project_url: https://github.com/jdarcyryan/conch
-    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@main/assets/conch_icon_256x256.png
-    license_url: https://github.com/jdarcyryan/conch/blob/main/LICENSE
+    # Icon and license URLs are pinned to a commit SHA (jsDelivr caches permanently,
+    # so branch URLs are discouraged). Only needs updating if the icon changes.
+    icon_url: https://cdn.jsdelivr.net/gh/jdarcyryan/conch@58b07c1e6131e6baaeef0add074f0ae5f67fd5cf/assets/conch_icon_256x256.png
+    copyright: Copyright 2026 jdarcyryan
+    license_url: https://github.com/jdarcyryan/conch/blob/58b07c1e6131e6baaeef0add074f0ae5f67fd5cf/LICENSE
     project_source_url: https://github.com/jdarcyryan/conch
     package_source_url: https://github.com/jdarcyryan/conch
     docs_url: https://github.com/jdarcyryan/conch/blob/main/README.md
@@ -73,6 +76,8 @@ chocolateys:
     description: |
       Conch is a cross-platform, declarative PowerShell environment manager written in Go.
       Describe your PowerShell versions and modules in a single TOML file.
+
+      This package supports 64-bit Windows only.
     release_notes: "https://github.com/jdarcyryan/conch/releases/tag/{{ .Version }}"
     url_template: 'https://github.com/jdarcyryan/conch/releases/download/{{ .Version }}/{{ .ArtifactName }}'
     skip_publish: true
